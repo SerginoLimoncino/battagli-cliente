@@ -1053,7 +1053,9 @@ function matchWord(t) {
   const out = new Map();
   const add = (w, str) => { const rs = VOCAB.get(w); if (rs) for (const r of rs) if ((out.get(r) || 0) < str) out.set(r, str); };
   if (/^\d+(\.\d+)?$/.test(t)) { add(t, 1); return out; }
-  const forms = SYNMAP.get(t) || [t];
+  const forms = (SYNMAP.get(t) || [t]).slice();
+  // spelled by ear: sica -> sika, kavo -> cavo, filtro/philtro, yamaha/iamaha, inoxs -> inox
+  if (!VOCAB.has(t)) for (const v of [t.replace(/c(?=[aou])/g, 'k'), t.replace(/k/g, 'c'), t.replace(/ch/g, 'k'), t.replace(/ph/g, 'f'), t.replace(/y/g, 'i'), t.replace(/^i/, 'y'), t.replace(/ks/g, 'x'), t.replace(/x/g, 'ks'), t.replace(/(.)\1/g, '$1')]) if (v !== t && VOCAB.has(v) && !forms.includes(v)) forms.push(v);
   for (const f of forms) {
     const own = f === t ? 1 : .92;
     if (VOCAB.has(f)) add(f, own);
@@ -2582,7 +2584,7 @@ document.addEventListener('click', e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 20, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 21, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 const vTxt = n => (n / 10).toFixed(1);
 let UPD = null;
 $('appVer').textContent = 'versione ' + vTxt(APP_V);
