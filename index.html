@@ -35,6 +35,15 @@
 /* Customer edition: no photo search, no phone numbers, no app sharing */
 #tabCam, #tabNumbers, #photoRow, #camBtn, #shareSec, #viewNumbers { display: none !important; }
 .tabbar .in { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; max-width: 520px !important; }
+
+/* update banner */
+.updbar { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top, 0px) + 10px); z-index: 80; display: flex; align-items: center; gap: 10px; max-width: 560px; margin: 0 auto; padding: 12px 12px 12px 16px; border-radius: 18px; background: var(--bg); color: var(--ink); box-shadow: 0 10px 30px rgba(var(--shadow-rgb, 15, 23, 42), .25), 0 0 0 1.5px var(--blue); }
+.updbar[hidden] { display: none; }
+.updbar .ut { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.updbar .ut b { font-size: 15px; }
+.updbar .ut small { font-size: 12.5px; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.updbar .btn { width: auto; padding: 10px 16px; font-size: 15px; flex: none; }
+.updbar .updx { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--soft); color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; }
 </style></head><body>
 <title>Battagli Marine Hardware</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,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">
@@ -532,6 +541,7 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
   <section id="shareSec" hidden><div class="block-h"><h2>Condividi l'app</h2></div><div class="shareops"><button class="btn primary" type="button" id="shareAndroid"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.87 3.22A11.4 11.4 0 0 0 12 8.15c-1.77 0-3.43.39-4.91 1L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>Android</button><button class="btn" type="button" id="shareIos" aria-disabled="true" style="background:var(--soft);color:var(--ink)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.3-3.52zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.07 1.96-.49 2.56-1.21z"/></svg>iPhone</button></div><p class="note" style="margin-top:8px">Invia insieme l'app e il catalogo attuale (WhatsApp, Telegram, Drive…). Il collega installa l'app, poi apre il file del catalogo con l'app Battagli: si carica da solo, foto comprese, senza cercare il PDF.</p></section>
   <section><div class="block-h"><h2>Tema colore</h2></div><div class="themes"><button class="theme" type="button" data-theme="chiaro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0a5cc2 45% 100%)"></i><span>Chiaro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="scuro" aria-pressed="false"><i style="background:linear-gradient(135deg,#1b2433 0 45%,#3b82f6 45% 100%)"></i><span>Scuro<small>Scuro</small></span></button><button class="theme" type="button" data-theme="carbon" aria-pressed="false"><i style="background:linear-gradient(135deg,#1d1d20 0 45%,#ff5a36 45% 100%)"></i><span>Carbon<small>Scuro</small></span></button><button class="theme" type="button" data-theme="viola" aria-pressed="false"><i style="background:linear-gradient(135deg,#241b3a 0 45%,#8b5cf6 45% 100%)"></i><span>Viola<small>Scuro</small></span></button><button class="theme" type="button" data-theme="azzurro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0891b2 45% 100%)"></i><span>Azzurro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="arancio" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#d9730d 45% 100%)"></i><span>Tramonto<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="verde" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#15803d 45% 100%)"></i><span>Verde<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="rosso" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#c62833 45% 100%)"></i><span>Rosso<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="oceano" aria-pressed="false"><i style="background:linear-gradient(135deg,#10282b 0 45%,#14b8a6 45% 100%)"></i><span>Oceano<small>Scuro</small></span></button><button class="theme" type="button" data-theme="notte" aria-pressed="false"><i style="background:linear-gradient(135deg,#000000 0 45%,#0ea5e9 45% 100%)"></i><span>Notte<small>Nero totale</small></span></button><button class="theme" type="button" data-theme="verdenero" aria-pressed="false"><i style="background:linear-gradient(135deg,#050806 0 45%,#22c55e 45% 100%)"></i><span>Verde e nero<small>Scuro</small></span></button><button class="theme" type="button" data-theme="rosa" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#db2777 45% 100%)"></i><span>Rosa<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="lavanda" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#7c3aed 45% 100%)"></i><span>Lavanda<small>Chiaro</small></span></button></div></section>
   <section><div class="block-h"><h2>Ricerca da foto</h2></div><div class="credit" style="text-align:left"><p class="visnote" id="visSetting" style="margin:0">Non attiva</p><div class="visbar" style="margin-top:10px"><i id="visSetBar"></i></div></div></section>
+  <section id="updSec"><div class="block-h"><h2>Aggiornamenti</h2><span id="appVer"></span></div><button class="btn primary" type="button" id="updCheck">Controlla aggiornamenti</button><p class="note" id="updNote" style="margin-top:8px">Si aggiorna solo l'app (funzioni e ricerca), non il catalogo: il catalogo nuovo arriva in PDF e si carica con "Aggiorna catalogo". Quando c'è una versione nuova compare in alto il pulsante "Aggiorna". Catalogo, preferiti, numeri e impostazioni restano salvati.</p></section>
   <section><div class="block-h"><h2>Cronologia</h2></div><button class="btn ghost" type="button" id="clearHist2" style="background:var(--soft);color:var(--ink)">Cancella cronologia delle ricerche</button></section>
   <section><div class="credit">App creata da<b>Sergio Tassoni</b><small>Battagli Marine Hardware · Catalogo Codici</small></div></section>
 </main>
@@ -613,6 +623,7 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
     <button class="btn ndel" type="button" id="numDel">Elimina questo numero</button>
   </form>
 </div>
+<div class="updbar" id="updBar" hidden role="status"><div class="ut"><b>Aggiornamento disponibile</b><small id="updTxt"></small></div><button class="btn primary" type="button" id="updGo">Aggiorna</button><button class="updx" type="button" id="updLater" aria-label="Più tardi">×</button></div>
 <div class="toast" id="toast" hidden></div>
 <div class="pdfstatus" id="pdfStatus" hidden></div>
 <div class="zoomimg" id="zoomImg" hidden><img alt=""><button class="zx" type="button" id="zoomX" aria-label="Chiudi">×</button><span class="zh">Pizzica per ingrandire · doppio tocco</span></div>
@@ -633,8 +644,10 @@ function normItems(items, pageH) {
     const str = (it.str || '').replace(/\s+/g, ' ').trim();
     if (!str) continue;
     const t = it.transform;
+    if (Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01) continue;
     const fs = Math.max(Math.hypot(t[2], t[3]), it.height || 0) || 8;
     const x = t[4], yTop = pageH - t[5] - fs, w = it.width || str.length * fs * 0.5;
+    if (fs >= 14 && yTop < 40 && /^\d\d - [^a-z]+$/.test(str)) continue;
     CODE_RE.lastIndex = 0;
     const m = [...str.matchAll(CODE_RE)];
     if (!m.length || (m.length === 1 && m[0][0].length === str.length)) {
@@ -680,7 +693,7 @@ function isHeaderLine(ln) {
   if (ln.codes.length || ln.items.length < 2) return false;
   const words = ln.items.map(i => i.s);
   const hits = words.filter(w => HEADER_WORDS.test(w.replace(/[:]/g, '').trim())).length;
-  return hits >= 2 || (hits >= 1 && words.every(w => w.length <= 14 && !/\d{3,}/.test(w)));
+  return hits >= 2 || (hits >= 1 && words.every(w => w.length <= 14 && !/\d{3,}/.test(w))) || /^(articolo|codice|cod\.?|art\.?)$/i.test(words[0]);
 }
 
 // Split a page into columns by looking at where codes sit horizontally.
@@ -695,7 +708,25 @@ function columnsOf(items, pageW) {
   }
   if (best < pageW * 0.25) return [items];
   const split = codeXs[at] - 4;
-  return [items.filter(i => i.x < split), items.filter(i => i.x >= split)];
+  // Codes in a column headed by something else than "articolo"/"codice" (e.g. "kit montaggio") are not a second table.
+  const rc = items.filter(i => i.code && i.x >= split).sort((a, b) => a.y - b.y)[0];
+  const head = items.filter(i => !i.code && Math.abs(i.x - rc.x) < 8 && i.y < rc.y && rc.y - i.y < 30).sort((a, b) => b.y - a.y)[0];
+  if (head && !/^(art|cod)/i.test(head.s) && !/\d/.test(head.s)) return [items];
+  // An item right of the split still belongs to the left table when its row (or the next code row below it,
+  // for headers) has codes only on the left: e.g. the "prezzo" column of a wide table above two narrow ones.
+  const codeRows = items.filter(i => i.code).map(i => ({ cy: i.y + i.h / 2, h: i.h, right: i.x >= split }));
+  const sideOf = it => {
+    const cy = it.y + it.h / 2;
+    let same = codeRows.filter(r => Math.abs(r.cy - cy) <= Math.max(2, Math.min(r.h, it.h) * 0.45));
+    if (!same.length) {
+      const below = codeRows.filter(r => r.cy > cy && r.cy - cy < 30);
+      if (below.length) { const y0 = Math.min(...below.map(r => r.cy)); same = below.filter(r => r.cy - y0 < 2); }
+    }
+    return !same.length || same.some(r => r.right) ? 1 : 0;
+  };
+  const left = [], right = [];
+  for (const i of items) (i.x < split || !sideOf(i) ? left : right).push(i);
+  return [left, right];
 }
 
 // State carried between pages so a table that continues keeps its product title.
@@ -732,8 +763,10 @@ function parsePage(state, rawItems, pageW, pageH, pageNo) {
         const desc = ctxClean.slice(k).map(l => l.text);
         const before = ctxClean.slice(Math.max(0, tIdx - 2), tIdx).map(l => l.text).filter(s => s.length > 2);
         blockIdx = state.blocks.length;
+        let tt = titleLines.map(l => l.text).join(' ');
+        if (desc.length && desc[0].length >= 5 && desc[0].length <= 90 && /[A-Z]{3}/.test(desc[0]) && desc[0] === desc[0].toUpperCase()) { before.push(tt); tt = desc.shift(); }
         state.blocks.push({
-          t: titleLines.map(l => l.text).join(' ').slice(0, 200),
+          t: tt.slice(0, 200),
           d: desc.join('\n').slice(0, 1500),
           s: before.join(' · ').slice(0, 200),
           hd: header ? header.items.map(h => [h.s, h.x, h.x + h.w]) : null,
@@ -749,12 +782,15 @@ function parsePage(state, rawItems, pageW, pageH, pageNo) {
       while (i < lines.length) {
         const l = lines[i];
         if (l.codes.length) {
-          for (let c = 0; c < l.codes.length; c++) {
-            const ci = l.codes[c];
-            const next = l.codes[c + 1];
-            const cells = l.items.filter(it => !it.code && it.x >= ci.x - 1 && (!next || it.x < next.x - 1));
+          // A code under a header that is not the article column (e.g. "kit montaggio") is a value of the row.
+          const codes = l.codes.filter((ci, k) => k === 0 || !hd || /^(art|cod)/i.test(labelFor(hd, ci) || 'art'));
+          const isCell = it => !it.code || !codes.includes(it);
+          for (let c = 0; c < codes.length; c++) {
+            const ci = codes[c];
+            const next = codes[c + 1];
+            const cells = l.items.filter(it => isCell(it) && it.x >= ci.x - 1 && (!next || it.x < next.x - 1));
             // Cells before the first code on the line belong to the first code.
-            if (c === 0) cells.unshift(...l.items.filter(it => !it.code && it.x < ci.x - 1));
+            if (c === 0) cells.unshift(...l.items.filter(it => isCell(it) && it.x < ci.x - 1));
             const row = {
               c: ci.code, b: blockIdx, p: pageNo,
               f: cells.map(it => [labelFor(hd, it), it.s]),
@@ -785,6 +821,20 @@ function labelFor(hd, it) {
   return bd < 60 ? best : '';
 }
 
+// Prices look like "12,50 A" (the letter is the price list). Make sure the price is labelled "prezzo":
+// split it off a cell it is glued to, and label it when the header was missing or wrong.
+const PRICE_RE = /^\d[\d.]*,\d{2} [ABCHNTUXYZ]$/;
+function fixPrice(f) {
+  f = f.flatMap(([k, v]) => {
+    const m = /^(.*\S)\s+(\d[\d.]*,\d{2} [ABCHNTUXYZ])$/.exec(v) || /^(.*[^\d.,\s])(\d[\d.]*,\d{2} [ABCHNTUXYZ])$/.exec(v);
+    return m ? [[/prezz/i.test(k) ? '' : k, m[1]], ['prezzo', m[2]]] : [[k, v]];
+  }).filter(([k, v]) => !/^Marine Hardware 20\d\d/.test(v));
+  if (f.some(([k, v]) => /prezz/i.test(k) && PRICE_RE.test(v))) return f;
+  let i = -1;
+  f.forEach(([k, v], j) => { if (PRICE_RE.test(v)) i = j; });
+  if (i < 0) return f;
+  return f.map(([k, v], j) => j === i ? ['prezzo', v] : [k === 'prezzo' ? '' : k, v]);
+}
 // Merge cells that share a label (e.g. "Grigio" + "chiaro").
 function finishIndex(state, meta) {
   const seen = new Map();
@@ -795,12 +845,12 @@ function finishIndex(state, meta) {
       const prev = merged[merged.length - 1];
       if (prev && k && prev[0] === k) prev[1] += ' ' + v; else merged.push([k, v]);
     }
-    r.f = merged;
+    r.f = fixPrice(merged);
     const key = r.c + '|' + r.p;
     if (seen.has(key)) continue;
     seen.set(key, 1); rows.push(r);
   }
-  return Object.assign({ v: 1, blocks: state.blocks.map(b => ({ t: b.t, d: b.d, s: b.s, p: b.p, h: b.hd ? b.hd.map(h => h[0]) : null })), rows }, meta);
+  return Object.assign({ v: 2, blocks: state.blocks.map(b => ({ t: b.t, d: b.d, s: b.s, p: b.p, h: b.hd ? b.hd.map(h => h[0]) : null })), rows }, meta);
 }
 // ---- end parser ----
 
@@ -951,17 +1001,34 @@ function clearHist() { lsSet('hist', []); lsSet('recent', []); renderRecent(); t
 function pushRecent(c) { const rec = lsGet('recent', []).filter(x => x !== c); rec.unshift(c); lsSet('recent', rec.slice(0, 12)); }
 
 // ---------- search ----------
-const STOP = new Set(['a','ad','di','da','in','con','su','per','il','lo','la','le','i','gli','un','una','uno','e','o','del','della','dei','delle','al','alla','ai','che','forma','tipo','di']);
-const SYN = [['nero', 'black'], ['bianco', 'white'], ['rosso', 'red'], ['blu', 'blue'], ['verde', 'green'], ['grigio', 'grey', 'gray'], ['giallo', 'yellow'], ['arancio', 'orange'], ['sigillante', 'sigillanti', 'silicone', 'mastice'], ['gradi', 'grado'], ['inox', 'acciaio'], ['pompa', 'pompe'], ['luce', 'luci', 'lampada', 'lampade'], ['gommone', 'tender']];
-const SYNMAP = new Map(); for (const g of SYN) for (const w of g) SYNMAP.set(w, g);
+const STOP = new Set(['a','ad','di','da','in','con','su','per','il','lo','la','le','i','gli','un','una','uno','e','o','del','della','dei','delle','al','alla','ai','che','forma','tipo','di','dello','degli','sul','sulla','nel','nella','mi','serve','cerco','vorrei','quello','quella','tipo','the','for','with','and','of','to','pcs','made','italy','qty','quantity']);
+const SYN_TXT = [["nero", "neri", "nera", "nere", "black"], ["bianco", "bianchi", "bianca", "bianche", "white"], ["rosso", "rossi", "rossa", "rosse", "red"], ["blu", "blue", "navy"], ["azzurro", "azzurri", "celeste"], ["verde", "verdi", "green"], ["grigio", "grigi", "grigia", "grey", "gray"], ["giallo", "gialli", "gialla", "yellow"], ["arancio", "arancione", "orange"], ["marrone", "brown"], ["beige", "sabbia", "sand"], ["trasparente", "trasparenti", "clear", "transparent"], ["argento", "silver"], ["oro", "dorato", "gold"], ["inox", "acciaio", "stainless", "steel", "aisi"], ["ottone", "brass"], ["bronzo", "bronze"], ["alluminio", "aluminum", "aluminium", "alu"], ["plastica", "plastic", "nylon", "pvc"], ["gomma", "rubber"], ["legno", "wood", "teak"], ["zincato", "zincata", "zincati", "galvanizzato", "galvanized"], ["cromato", "cromata", "chrome"], ["sigillante", "sigillanti", "silicone", "mastice", "sealant", "sigillare"], ["colla", "adesivo", "adesiva", "collante", "glue", "adhesive"], ["nastro", "nastri", "scotch", "tape"], ["mascheratura", "carrozziere", "crespata", "masking"], ["gradi", "grado"], ["pompa", "pompe", "pump", "pumps"], ["sentina", "bilge"], ["luce", "luci", "lampada", "lampade", "lampadina", "lampadine", "light", "lights", "lamp", "led", "faro", "fari", "faretto"], ["fanale", "fanali", "navigazione"], ["gommone", "tender", "battellino"], ["barca", "barche", "imbarcazione", "natante", "boat"], ["motore", "motori", "engine", "motor", "fuoribordo", "outboard"], ["elica", "eliche", "propeller", "prop"], ["ancora", "ancore", "anchor"], ["catena", "catene", "chain"], ["cima", "cime", "corda", "corde", "fune", "funi", "rope", "sagola"], ["grillo", "grilli", "shackle"], ["moschettone", "moschettoni", "carabiner", "snap"], ["gancio", "ganci", "hook"], ["parabordo", "parabordi", "fender", "fenders"], ["copriparabordo", "copriparabordi", "coprifender"], ["remo", "remi", "oar", "oars"], ["pagaia", "pagaie", "paddle"], ["boa", "boe", "buoy"], ["salvagente", "salvagenti", "anulare", "ciambella", "lifebuoy"], ["giubbotto", "giubbotti", "giubbetto", "salvataggio", "lifejacket", "jacket"], ["scaletta", "scalette", "scala", "ladder"], ["bitta", "bitte", "galloccia", "gallocce", "cleat"], ["maniglia", "maniglie", "maniglione", "corrimano", "handle", "handrail"], ["cerniera", "cerniere", "hinge", "hinges"], ["sportello", "sportelli", "portello", "portelli", "portellino", "botola", "boccaporto", "osteriggio", "door", "hatch"], ["oblo", "oblò", "porthole"], ["cassetta", "cassette", "scatola", "scatole", "box", "vano", "gavone", "contenitore"], ["cavo", "cavi", "filo", "fili", "cable", "cables", "wire"], ["elettrico", "elettrici", "elettrica", "elettriche", "electric", "electrical"], ["interruttore", "interruttori", "pulsante", "switch"], ["presa", "prese", "spina", "plug", "socket"], ["fusibile", "fusibili", "fuse"], ["batteria", "batterie", "accumulatore", "battery"], ["caricabatteria", "caricabatterie", "charger"], ["pannello", "pannelli", "quadro", "panel"], ["antenna", "antenne", "antenna"], ["tromba", "trombe", "clacson", "avvisatore", "horn"], ["bussola", "bussole", "compass"], ["strumento", "strumenti", "indicatore", "gauge"], ["telecomando", "comando", "control", "remote"], ["guida", "timoneria", "sterzo", "steering"], ["timone", "timoni", "rudder"], ["volante", "volanti", "ruota", "wheel"], ["verricello", "verricelli", "salpancora", "windlass", "winch"], ["bozzello", "bozzelli", "carrucola", "block", "pulley"], ["tubo", "tubi", "manichetta", "tubazione", "hose", "pipe"], ["raccordo", "raccordi", "giunto", "giunti", "attacco", "fitting", "connector"], ["rubinetto", "rubinetti", "valvola", "valvole", "valve"], ["filtro", "filtri", "filter"], ["olio", "oli", "oil"], ["carburante", "benzina", "gasolio", "nafta", "fuel", "diesel"], ["serbatoio", "serbatoi", "tanica", "taniche", "tank"], ["acqua", "water"], ["doccia", "docce", "shower"], ["lavello", "lavandino", "sink"], ["wc", "toilette", "gabinetto", "bagno", "toilet"], ["deodorante", "profumatore", "odori", "deodorant"], ["disgregante", "additivo", "chemical"], ["detergente", "detergenti", "pulitore", "sapone", "shampoo", "cleaner", "cleaning", "pulizia"], ["lucidante", "polish", "lucidare"], ["sbiancante", "ravvivante", "brightener"], ["vernice", "vernici", "pittura", "smalto", "paint", "varnish"], ["antivegetativa", "antifouling"], ["pennello", "pennelli", "brush"], ["rullo", "rulli", "roller"], ["spugna", "spugne", "sponge"], ["spazzola", "spazzole", "spazzolone", "brush"], ["secchio", "secchi", "bucket"], ["telo", "teli", "telone", "copertura", "cover", "tendalino", "bimini", "tenda"], ["cuscino", "cuscini", "cushion"], ["tavolo", "tavoli", "tavolino", "table"], ["sedia", "sedie", "seggiolino", "poltroncina", "seat"], ["vite", "viti", "screw", "screws"], ["bullone", "bulloni", "bolt"], ["dado", "dadi", "nut"], ["rondella", "rondelle", "washer"], ["chiave", "chiavi", "wrench", "key"], ["coltello", "coltelli", "knife"], ["pesca", "fishing"], ["canna", "canne", "rod"], ["mulinello", "reel"], ["frigorifero", "frigo", "fridge"], ["gonfiatore", "gonfiaggio", "inflator"], ["anodo", "anodi", "zinco", "zinchi", "anode", "zinc"], ["certificato", "certificata", "certificati", "certificazione", "certificazioni", "omologato", "omologata", "omologazione", "ce", "iso", "certified"], ["automatico", "automatica", "automatici", "auto", "automatic"], ["manuale", "manuali", "manual"], ["immersione", "sommergibile", "submersible"], ["kit", "set", "assortimento"], ["ricambio", "ricambi", "spare"], ["watt", "w"], ["volt", "v"], ["litro", "litri", "lt", "l", "liter", "litre"], ["chilo", "chili", "kilo", "kili", "kg"], ["metro", "metri", "mt", "m", "meter"], ["millimetri", "mm"], ["centimetri", "cm"], ["pollici", "pollice", "inch"], ["piedi", "feet", "ft"]];
+const UNITS = new Set('watt w volt v litro litri lt l liter litre chilo chili kilo kili kg metro metri mt m meter millimetri mm centimetri cm pollici pollice inch piedi feet ft gal gph'.split(' '));
+const SYNMAP = new Map();
+for (const g of SYN_TXT) for (const w of g) SYNMAP.set(w, [...new Set([...(SYNMAP.get(w) || []), ...g])]);
 function normText(t) {
-  return fold(t).replace(/°/g, ' gradi ').replace(/(\d)\s*[x×]\s*(\d)/g, '$1 x $2').replace(/(\d),(\d)/g, '$1.$2');
+  return fold(t).replace(/°/g, ' gradi ').replace(/(\d)\s*[x×]\s*(\d)/g, '$1 x $2').replace(/(\d),(\d)/g, '$1.$2')
+    // model codes are kept whole and also split: m66 -> "m66 m 66", 320w -> "320w 320 w"
+    .replace(/[a-z0-9]*(?:[a-z]\d|\d[a-z])[a-z0-9]*/g, w => w + ' ' + w.replace(/(\d)([a-z])/g, '$1 $2').replace(/([a-z])(\d)/g, '$1 $2'));
 }
 function words(t) { return t.split(/[^a-z0-9.]+/).map(w => w.replace(/^\.+|\.+$/g, '')).filter(Boolean); }
+// Light Italian stemmer: certificazione, certificato, certificati -> certific
+function stem(w) {
+  if (w.length < 5 || /\d/.test(w)) return w;
+  let s = w.replace(/(zione|zioni|mento|menti|abile|ibile|abili|ibili|atore|atori|atrice|ature|atura)$/, '');
+  if (s === w) s = w.replace(/(ato|ata|ati|ate|ito|ita|iti|ite|uto|uta|uti|ute)$/, '');
+  if (s === w) s = w.replace(/(ione|ioni|ore|ori|ura|ure)$/, '');
+  s = s.replace(/[aeiou]+$/, '');
+  return s.length >= 4 ? s : w.slice(0, 4);
+}
+const COMPOUND = /^(porta|passa|para|copri|salva|anti|auto|semi|super|mini|maxi|multi|tira|ferma|blocca|tendi|reggi|lava|tappa|sali|guida|segna|mezzo|ammortizza|sgancia|aggancia)/;
+let STEMS = new Map();
 function buildVocab() {
   const m = new Map();
   HAY.forEach((h, i) => { for (const w of new Set(words(h))) { let a = m.get(w); if (!a) m.set(w, a = []); a.push(i); } });
   VOCAB = m;
+  STEMS = new Map();
+  for (const w of m.keys()) { if (/^\d/.test(w)) continue; const st = stem(w); let a = STEMS.get(st); if (!a) STEMS.set(st, a = []); a.push(w); }
 }
 function stems(t) {
   const v = new Set([t]);
@@ -983,18 +1050,37 @@ function editLE(a, b, k) {
 function matchWord(t) {
   const out = new Map();
   const add = (w, str) => { const rs = VOCAB.get(w); if (rs) for (const r of rs) if ((out.get(r) || 0) < str) out.set(r, str); };
-  const forms = SYNMAP.get(t) ? SYNMAP.get(t).slice() : [t];
   if (/^\d+(\.\d+)?$/.test(t)) { add(t, 1); return out; }
+  const forms = SYNMAP.get(t) || [t];
   for (const f of forms) {
-    if (VOCAB.has(f)) add(f, 1);
-    if (f.length >= 4 && /[aeio]$/.test(f)) for (const v of 'aeio') { const g = f.slice(0, -1) + v; if (g !== f && VOCAB.has(g)) add(g, .95); }
-    if (f.length >= 6) for (const st of stems(f)) { if (st.length < 5) continue; for (const w of VOCAB.keys()) if (w !== f && w.startsWith(st) && !/^\d/.test(w)) add(w, .9); }
+    const own = f === t ? 1 : .92;
+    if (VOCAB.has(f)) add(f, own);
+    if (f.length < 3) continue;
+    if (f.length >= 4 && /[aeio]$/.test(f)) for (const v of 'aeio') { const g = f.slice(0, -1) + v; if (g !== f && VOCAB.has(g)) add(g, own * .95); }
+    if (f.length >= 5) for (const w of STEMS.get(stem(f)) || []) if (w !== f) add(w, own * .9);
+    if (f.length >= 6) for (const st of stems(f)) { if (st.length < 5) continue; for (const w of VOCAB.keys()) if (w !== f && w.startsWith(st) && !/^\d/.test(w)) add(w, own * .85); }
+    if (f.length >= 4) { const fs = stem(f); for (const w of VOCAB.keys()) if (w.length > f.length + 2 && COMPOUND.test(w) && (w.endsWith(f) || w.endsWith(fs) || w.slice(0, -1).endsWith(fs))) add(w, own * .7); }
   }
   if (!out.size && t.length >= 5) {
     const k = t.length >= 8 ? 2 : 1;
     for (const w of VOCAB.keys()) if (Math.abs(w.length - t.length) <= k && !/^\d/.test(w) && editLE(w, t, k)) add(w, .7);
   }
   if (!out.size && t.length >= 6) { for (const w of VOCAB.keys()) if (w.includes(t)) add(w, .6); }
+  // a word glued together: "aquakem" -> "aqua kem"
+  if (!out.size && t.length >= 6) for (let k = 3; k <= t.length - 3; k++) {
+    const a = t.slice(0, k), b = t.slice(k);
+    if (VOCAB.has(a) && VOCAB.has(b)) { const sb = new Set(VOCAB.get(b)); for (const r of VOCAB.get(a)) if (sb.has(r)) out.set(r, Math.max(out.get(r) || 0, .9)); }
+  }
+  return out;
+}
+// "aqua kem" -> "aquakem" when the catalogue writes it as one word
+function joinToks(toks) {
+  const out = [];
+  for (let k = 0; k < toks.length; k++) {
+    const j = toks[k] + (toks[k + 1] || '');
+    if (k + 1 < toks.length && !/^\d/.test(toks[k]) && VOCAB.has(j) && !(VOCAB.has(toks[k]) && VOCAB.has(toks[k + 1]) && VOCAB.get(j).length < 2)) { out.push(j); k++; }
+    else out.push(toks[k]);
+  }
   return out;
 }
 function m_has(m, r) { return m.has(r); }
@@ -1016,19 +1102,26 @@ function search(q, qd) {
     cand = pre.concat(mid);
   }
   if (!textRaw) return cand ? { list: cand, mode: 'code', d } : { list: [], mode: 'none', d };
-  const toks = words(normText(textRaw)).filter(t => !STOP.has(t));
+  let toks = joinToks(words(normText(textRaw)).filter(t => !STOP.has(t)));
+  toks = toks.filter((t, k) => toks.indexOf(t) === k);
   if (!toks.length) return cand ? { list: cand, mode: 'code', d } : { list: [], mode: 'none', d };
-  const maps = toks.map(matchWord);
+  let maps = toks.map(matchWord);
+  // words the catalogue does not know at all (a brand it does not carry, "per casa"...) do not block the search
+  const ignored = toks.filter((t, k) => !maps[k].size && !/\d/.test(t));
+  const known = toks.map((t, k) => k).filter(k => maps[k].size);
+  if (!known.length) return cand ? { list: cand, mode: 'code', d } : { list: [], mode: 'text', d, toks, ignored, full: false, uniq: -1 };
+  toks = known.map(k => toks[k]); maps = known.map(k => maps[k]);
   const N = rows.length;
-  const idf = maps.map(m => Math.log(1 + N / (1 + m.size)));
-  const need = toks.length <= 2 ? toks.length : Math.ceil(toks.length * 0.6);
-  const run = pool => {
+  const idf = maps.map((m, k) => Math.log(1 + N / (1 + m.size)) * (/^\d/.test(toks[k]) ? 1.3 : toks[k].length <= 2 ? .5 : 1));
+  // numbers and unit letters (320, w, kg) rank the results but do not decide which articles are close
+  const sig = toks.map(t => !/^\d/.test(t) && t.length > 2 && !UNITS.has(t)), nSig = sig.filter(Boolean).length;
+  const run = (pool, need, words) => {
     const cnt = new Map();
     const inPool = pool ? new Set(pool) : null;
-    maps.forEach((m, k) => { for (const [r, st] of m) { if (inPool && !inPool.has(r)) continue; const c = cnt.get(r) || { n: 0, s: 0 }; c.n++; c.s += idf[k] * st; cnt.set(r, c); } });
+    maps.forEach((m, k) => { for (const [r, st] of m) { if (inPool && !inPool.has(r)) continue; const c = cnt.get(r) || { n: 0, w: 0, s: 0 }; c.n++; if (sig[k]) c.w++; c.s += idf[k] * st; cnt.set(r, c); } });
     const out = [];
     for (const [r, c] of cnt) {
-      if (c.n < need) continue;
+      if ((words ? c.w : c.n) < need) continue;
       let bonus = 0; maps.forEach((m, k) => { if (m.has(r) && toks[k].length >= 3 && HAYT[r].includes(toks[k].slice(0, Math.max(3, toks[k].length - 2)))) bonus += idf[k] * .35; });
       for (let k = 0; k + 1 < toks.length; k++) {
         if (!m_has(maps[k], r) || !m_has(maps[k + 1], r)) continue;
@@ -1040,13 +1133,21 @@ function search(q, qd) {
     }
     return out;
   };
-  let scored = run(cand), relaxed = false;
-  if (!scored.length && cand) { scored = run(null); relaxed = scored.length > 0; }
-  scored.sort((a, b) => b[1] - a[1] || b[2] - a[2] || rows[a[0]].c.localeCompare(rows[b[0]].c));
+  const all = toks.length;
+  let scored = run(cand, all), relaxed = false, partial = false;
+  if (!scored.length && cand) { scored = run(null, all); relaxed = scored.length > 0; }
+  // nothing has every word: show the closest articles, best-matching first
+  // in the closest-articles mode, a number alone ("320") must not outweigh the words
+  if (!scored.length && all >= 2) toks.forEach((t, k) => { if (!sig[k]) idf[k] *= .1; });
+  if (!scored.length && all >= 2 && nSig) { scored = run(relaxed ? null : cand, Math.max(1, nSig - (nSig === all ? 1 : 0)), true); partial = scored.length > 0; }
+  if (!scored.length && all >= 2 && nSig >= 2) { scored = run(relaxed ? null : cand, Math.max(1, nSig - 1), true); partial = scored.length > 0; }
+  if (!scored.length && all >= 3) { scored = run(relaxed ? null : cand, 1); partial = scored.length > 0; }
+  // closest articles: the rarest words weigh most ("pompa sentina" beats "320 w")
+  scored.sort((a, b) => (partial ? 0 : b[1] - a[1]) || b[2] - a[2] || rows[a[0]].c.localeCompare(rows[b[0]].c));
   const list = scored.map(x => x[0]);
-  const full = scored.length ? scored[0][1] === toks.length : false;
+  const full = scored.length ? scored[0][1] === all : false;
   const topCodes = new Set(scored.filter(x => x[1] === scored[0][1]).map(x => rows[x[0]].c));
-  return { list, mode: 'text', d: relaxed ? '' : d, relaxed, toks, full, uniq: scored.length && topCodes.size === 1 && full ? scored[0][0] : -1 };
+  return { list, mode: 'text', d: relaxed ? '' : d, relaxed, partial, ignored, toks, full, best: scored.length ? scored[0][1] : 0, uniq: scored.length && topCodes.size === 1 && full && !ignored.length ? scored[0][0] : -1 };
 }
 
 function hlCode(c, d) {
@@ -1086,6 +1187,8 @@ function runSearch() {
   if (!full) hint.innerHTML = '';
   else if (res.mode === 'code') hint.innerHTML = d.length >= 8 ? `Codice <code>${fmtCode(d.slice(0, 8))}</code>` : `Codici che iniziano con <code>${esc(fmtPartial(d))}</code>`;
   else if (res.relaxed) hint.textContent = 'Nessun articolo con quel codice e quella descrizione: ti mostro quelli per sola descrizione.';
+  else if (res.partial) hint.textContent = 'Nessun articolo ha tutte le parole: ti mostro i più vicini' + (res.ignored && res.ignored.length ? ' (non trovo: ' + res.ignored.join(', ') + ')' : '');
+  else if (res.ignored && res.ignored.length) hint.textContent = 'Non trovo nel catalogo: ' + res.ignored.join(', ') + ' · cerco con le altre parole';
   else hint.textContent = 'Cerco nella descrizione: l\'ordine delle parole non conta';
   $('resultsSec').hidden = !full;
   $('repSec').hidden = !!full;
@@ -1664,7 +1767,7 @@ let BR = { rep: '', fams: [], shown: 80 };
 function famTitle(r) {
   const b = INDEX.blocks[r.b] || {};
   const generic = t => !t || /marine hardware/i.test(t) || /^\d{2}\s*-/.test(t) || Object.values(REPARTI).some(x => fold(x) === fold(t)) || fold(t).replace(/[^a-z]/g, '') === '';
-  for (const t of [b.s, b.t]) if (!generic(t)) return t.replace(/\s+/g, ' ').trim();
+  for (const t of [b.t, b.s]) if (!generic(t)) return t.replace(/\s+/g, ' ').trim();
   const sm = rowSummary(r); if (sm) return sm.split(' · ')[0];
   return (b.d || '').split(/[.\n]/)[0].slice(0, 60) || 'Articolo ' + fmtCode(r.c);
 }
@@ -2323,6 +2426,36 @@ async function importBundled() {
   } catch (e) { overlay(false); return false; }
 }
 
+// ---------- one-time upgrade of a catalogue read by an older version (prices) ----------
+async function upgradeIndex() {
+  const idx = await idbGet('index');
+  if (!idx || !idx.rows || !idx.rows.length || idx.example || idx.v >= 2) return;
+  const pdf = await idbGet('pdf'), key = await idbGet('pdfKey');
+  if (!pdf || key !== idx.at) return;
+  overlay(true, 'Aggiorno il catalogo', 'Rileggo i prezzi dal PDF (solo questa volta)…', 0);
+  const doc = await openPdf(new Uint8Array(await pdf.arrayBuffer()));
+  const st = newParseState(), n = doc.numPages;
+  for (let p = 1; p <= n; p++) {
+    const page = await doc.getPage(p);
+    const vp = page.getViewport({ scale: 1 });
+    parsePage(st, (await page.getTextContent()).items, vp.width, vp.height, p);
+    page.cleanup();
+    if (p % 10 === 0 || p === n) { overlay(true, null, `Pagina ${p} di ${n}`, p / n); await tick(); }
+  }
+  doc.destroy();
+  const nx = finishIndex(st, { name: idx.name, pages: idx.pages, at: idx.at });
+  if (!nx.rows.length) { overlay(false); return; }
+  const pos = new Map(nx.rows.map((r, i) => [r.c + '|' + r.p, i]));
+  const vm = await idbGet('vismeta');
+  if (vm && vm.at === idx.at) for (let c = 0; c < (vm.chunks || 0); c++) {
+    const part = await idbGet('vis:' + c); if (!part) continue;
+    for (const it of part) it.rows = it.rows.map(ri => idx.rows[ri] && pos.get(idx.rows[ri].c + '|' + idx.rows[ri].p)).filter(i => i != null);
+    await idbSet('vis:' + c, part);
+  }
+  await idbSet('index', nx);
+  overlay(false);
+}
+
 // ---------- boot ----------
 (async function boot() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
@@ -2340,6 +2473,7 @@ async function importBundled() {
       }
     }
   } catch {}
+  try { await upgradeIndex(); } catch (e) { overlay(false); }
   setIndex(EXAMPLE, {});
   const idx = await idbGet('index');
   if (idx && idx.rows && idx.rows.length) setIndex(idx, (await idbGet('meta')) || {});
@@ -2441,6 +2575,53 @@ document.addEventListener('click', e => {
   b.setAttribute('aria-pressed', on); b.innerHTML = favLabel(c);
   toast(on ? 'Aggiunto ai preferiti' : 'Tolto dai preferiti'); renderFav();
 });
+
+// ---------- one-tap updates ----------
+const APP_V = 20, APP_ED = 'cliente', APP_PF = 'web', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const vTxt = n => (n / 10).toFixed(1);
+let UPD = null;
+$('appVer').textContent = 'versione ' + vTxt(APP_V);
+try { localStorage.removeItem('appcodeTry'); } catch {}
+async function updCheck(manual) {
+  try {
+    const r = await fetch(UPD_BASE + 'version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('http');
+    const j = await r.json();
+    if (j.ed !== APP_ED || !(j.v > APP_V)) { if (manual) toast('Hai già l\'ultima versione (' + vTxt(APP_V) + ')'); return; }
+    UPD = j;
+    $('updTxt').textContent = 'Versione ' + vTxt(j.v) + (j.note ? ' · ' + j.note : '');
+    $('updBar').hidden = false;
+  } catch (e) { if (manual) toast('Non riesco a controllare: serve la connessione a internet'); }
+}
+async function updApply() {
+  if (!UPD) return;
+  const b = $('updGo'); b.disabled = true; b.textContent = 'Scarico…';
+  try {
+    if (window.__LOADER) {
+      const r = await fetch(UPD_BASE + APP_PF + '.html?v=' + UPD.v, { cache: 'no-store' });
+      if (!r.ok) throw new Error('http');
+      const html = await r.text();
+      if (html.indexOf("APP_ED = '" + APP_ED + "'") < 0 || html.indexOf("APP_PF = '" + APP_PF + "'") < 0 || html.indexOf('const APP_V = ' + UPD.v + ',') < 0) throw new Error('bad');
+      localStorage.setItem('appcode', JSON.stringify({ v: UPD.v, ed: APP_ED, pf: APP_PF, html }));
+      localStorage.removeItem('appcodeTry');
+    } else {
+      try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch {}
+      try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(x => x.update().catch(() => {}))); } catch {}
+    }
+    toast('Aggiornato: riavvio l\'app');
+    setTimeout(() => location.replace(location.pathname + (window.__LOADER ? '' : '?v=' + UPD.v)), 600);
+  } catch (e) {
+    b.disabled = false; b.textContent = 'Aggiorna';
+    toast(e && e.message === 'bad' ? 'Aggiornamento non valido, riprova più tardi' : 'Non riesco a scaricare l\'aggiornamento: controlla internet');
+  }
+}
+$('updGo').addEventListener('click', updApply);
+$('updLater').addEventListener('click', () => { $('updBar').hidden = true; });
+$('updCheck').addEventListener('click', () => updCheck(true));
+let updLast = 0;
+const updAuto = () => { if (Date.now() - updLast < 3 * 3600e3 || !navigator.onLine) return; updLast = Date.now(); updCheck(false); };
+setTimeout(updAuto, 4000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updAuto(); });
 </script>
 
 <script>if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}</script>
