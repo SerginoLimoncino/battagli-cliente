@@ -2521,6 +2521,8 @@ const SHARE_URL = { android: 'https://serginolimoncino.github.io/battagli-client
 const SHARE_TXT = { android: 'Catalogo Battagli per Android: scarica e installa l\'app da questo link.', ios: 'Catalogo Battagli per iPhone: apri il link con Safari, poi Condividi > "Aggiungi alla schermata Home".', pc: 'Catalogo Battagli per PC Windows: scarica lo zip, estrailo e apri "Battagli Catalogo".' };
 async function shareTo(k) {
   const url = SHARE_URL[k], text = SHARE_TXT[k];
+  // inside the Android app: the phone's own share sheet (WhatsApp, mail…) with the link
+  try { if (window.BattagliApp && BattagliApp.shareText) { BattagliApp.shareText(text + '\n' + url); return; } } catch (e) {}
   try { if (navigator.share) { await navigator.share({ title: 'Catalogo Battagli', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   let ok = false; try { await navigator.clipboard.writeText(text + ' ' + url); ok = true; } catch (e) {}
   if (!ok) { const t = document.createElement('textarea'); t.value = text + ' ' + url; document.body.appendChild(t); t.select(); try { ok = document.execCommand('copy'); } catch (e) {} t.remove(); }
@@ -2528,7 +2530,7 @@ async function shareTo(k) {
 }
 for (const id of ['shareAndroid', 'shareIos']) { const o = document.getElementById(id); if (o) o.replaceWith(o.cloneNode(true)); }
 $('shareSec').hidden = false; $('shareIos').removeAttribute('aria-disabled');
-$('shareAndroid').addEventListener('click', () => (typeof APP !== 'undefined' && APP && typeof shareApp === 'function') ? shareApp() : shareTo('android'));
+$('shareAndroid').addEventListener('click', () => shareTo('android'));
 $('shareIos').addEventListener('click', () => shareTo('ios'));
 $('sharePc').addEventListener('click', () => shareTo('pc'));
 // ---------- share links (this edition only) ----------
@@ -2542,7 +2544,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 22, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 23, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
