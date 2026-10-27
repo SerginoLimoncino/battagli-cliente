@@ -3098,7 +3098,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 24, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 25, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -4323,6 +4323,111 @@ function low(s) { return String(s || '').toLowerCase().trim(); }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Official producer data sheets for articles that have no verified Più info data (same rule: producer's own file only).
+// 3M: official data sheets by Battagli code (8 digits = that row, 6 = whole block), copied from 3M's own files
+const SCH_CODE = {
+  '010113': 'https://multimedia.3m.com/mws/media/1721739O/3m-dual-lock-reclosable-fasteners-technical-document.pdf',
+  '010114': 'https://multimedia.3m.com/mws/media/2366370O/3M-Dual-Lock-Reclosable-Fastener-SJ3550.pdf',
+  '010249': 'https://multimedia.3m.com/mws/media/1721739O/3m-dual-lock-reclosable-fasteners-technical-document.pdf',
+  '01024901': 'https://multimedia.3m.com/mws/media/2366385O/3M-Dual-Lock-Reclosable-Fastener-SJ3551.pdf',
+  '01024904': 'https://multimedia.3m.com/mws/media/2366385O/3M-Dual-Lock-Reclosable-Fastener-SJ3551.pdf',
+  '010250': 'https://multimedia.3m.com/mws/media/1896323O/bolletino-tecnico-nastri-antisvicolo-safety-walk-it.pdf',
+  '010396': 'https://multimedia.3m.com/mws/media/2522838O/3m-double-coated-tape-gpt-020.pdf',
+  '010435': 'https://multimedia.3m.com/mws/media/1160618O/extreme-mounting-tape-product-info-sheet-europe-april-2013.pdf',
+  '010492': 'https://multimedia.3m.com/mws/media/2300034O/3m-hook-fastener-sj3526n-tds.pdf',
+  '010546': 'https://multimedia.3m.com/mws/media/1721739O/3m-dual-lock-reclosable-fasteners-technical-document.pdf',
+  '010630': 'https://multimedia.3m.com/mws/media/1896323O/bolletino-tecnico-nastri-antisvicolo-safety-walk-it.pdf',
+  '100020': 'https://multimedia.3m.com/mws/media/2522912O/3m-marine-adhesive-sealant-5200.pdf',
+  '10002001': 'https://multimedia.3m.com/mws/media/576967O/3mtm-marine-adhesive-sealant-fast-cure-5200.pdf',
+  '100026': 'https://multimedia.3m.com/mws/media/1809103O/3m-618-abrasive-sheets-and-rolls.pdf',
+  '100029': 'https://multimedia.3m.com/mws/media/1399653O/3m-automotive-masking-tape-2328-tds-ner.pdf',
+  '100030': 'https://multimedia.3m.com/mws/media/1684753O/scotch-painters-tape-2090-tech-data-sheet.pdf',
+  '100126': 'https://multimedia.3m.com/mws/mediawebserver?mwsId=SSSSSuUn_zu8l00xl82xM821Pv70k17zHvu9lxtD7SSSSSS--',
+  '10012701': 'https://multimedia.3m.com/mws/media/2135395O/3m-perfect-it-iii-fast-cut-compound-09374-tds-it.pdf',
+  '10012702': 'https://multimedia.3m.com/mws/media/1399631O/3m-perfect-it-iii-fine-compound-09375-tds-ner.pdf',
+  '10012703': 'https://multimedia.3m.com/mws/media/1399636O/3m-perfect-it-iii-machine-polish-09376-tds-ner.pdf',
+  '100138': 'https://multimedia.3m.com/mws/media/255325O/product-bulletin-stainless-steel-cleaner-polisher-aerosol.pdf',
+  '100140': 'https://multimedia.3m.com/mws/media/2387276O/3m-adhesive-cleaner-08984.pdf',
+  '100142': 'https://multimedia.3m.com/mws/media/2639074O/3m-288u-gold-abrasives-tds-ner.pdf',
+  '100143': 'https://multimedia.3m.com/mws/media/1809168O/3m-hookit-finishing-film-abrasive-disc-260l.pdf',
+  '100144': 'https://multimedia.3m.com/mws/media/2362931O/3m-trizact-hookit-foam-abrasive-disc-443-sa-all-grades-italian-tds.pdf',
+  '100145': 'https://multimedia.3m.com/mws/media/1393569O/scotch-brite-tm-mx-sr-multiflex-rotoli.pdf',
+  '100178': 'https://multimedia.3m.com/mws/media/1838915O/3m-aura-9300-gen3-series-particulate-respirators-technical-bulletin.pdf',
+  '100222': 'https://multimedia.3m.com/mws/media/1688796O/j439823-sg-psd-rr-4000-technical-datasheet-italian.pdf',
+  '100223': 'https://multimedia.3m.com/mws/media/1838921O/3m-half-mask-respirators-6000-series-technical-bulletin.pdf',
+  '100229': 'https://multimedia.3m.com/mws/media/1420274O/3m-reusable-respirator-filters-bayonet.pdf',
+  '100230': 'https://multimedia.3m.com/mws/media/1160636O/external-release.pdf',
+  '100235': 'https://multimedia.3m.com/mws/media/2366211O/3m-vinyl-tape-471.pdf',
+  '100250': 'https://multimedia.3m.com/mws/media/1399655O/3m-scotch-clear-masking-films-07838-80110.pdf',
+  '10025501': 'https://multimedia.3m.com/mws/media/1621846O/3m-securefit-sf400-sf400x-series-safety-spectacles-datasheet.pdf',
+  '10025502': 'https://multimedia.3m.com/mws/media/1621846O/3m-securefit-sf400-sf400x-series-safety-spectacles-datasheet.pdf',
+  '10025503': 'https://multimedia.3m.com/mws/media/1824082O/3m-over-spectacles-2800-series-technical-datasheet-english-online-version.pdf',
+  '100256': 'https://multimedia.3m.com/mws/media/1825562O/3m-cubitron-ii-782c-technical-data.pdf',
+  '100257': 'https://multimedia.3m.com/mws/media/1950559O/sb-cns-xtpro-discs-toolkit.pdf',
+  '100268': 'https://multimedia.3m.com/mws/media/1849967O/earplugs-3m-1100-and-1110-tds.pdf',
+  '100355': 'https://multimedia.3m.com/mws/media/893241O/tape-ds-template.pdf',
+  '100356': 'https://multimedia.3m.com/mws/media/2366285O/3M-Scotch-Fine-Line-Tape-218.pdf',
+  '100358': 'https://multimedia.3m.com/mws/media/2180547O/3m-1310-banded-earplugs-technical-datasheet-italian.pdf',
+  '10035901': 'https://multimedia.3m.com/mws/media/1809107O/3m-perfect-it-fast-cut-plus-extreme-51816-51815-tds-ceemea.pdf',
+  '10035902': 'https://multimedia.3m.com/mws/media/1809138O/3m-extra-fine-compound-80349-tds-ceemea.pdf',
+  '10035903': 'https://multimedia.3m.com/mws/media/1596085O/3m-perfect-it-iii-ultrafina-se-50383-tds-it.pdf',
+  '100409': 'https://multimedia.3m.com/mws/media/1792868O/dischi-e-fogli-abrasivi-clean-sanding-737u-3m-cubitron-ii-hookit-scheda-tecnica.pdf',
+  '100426': 'https://multimedia.3m.com/mws/media/2374481O/3m-high-performance-blue-masking-tape-3434-tds-it.pdf',
+  '100427': 'https://multimedia.3m.com/mws/media/1399611O/3m-product-data-sheet.pdf',
+  '100428': 'https://multimedia.3m.com/mws/media/1960343O/tds-36112-36113-3m-perfect-it-boat-wax.pdf',
+  '100429': 'https://multimedia.3m.com/mws/media/1399620O/3m-product-data-sheet.pdf',
+  '100430': 'https://multimedia.3m.com/mws/media/1399625O/3m-perfect-it-gelcoat-mc-compound-wax-36105-36106-36107.pdf',
+  '100431': 'https://multimedia.3m.com/mws/media/1399616O/3m-perfect-it-gelcoat-hc-compound-36101-36102-36103-36104.pdf',
+  '10043501': 'https://multimedia.3m.com/mws/media/1825577O/scotch-brite-7447-technical-data.pdf',
+  '10043502': 'https://multimedia.3m.com/mws/media/1825579O/scotch-brite-7448-technical-data.pdf',
+  '100437': 'https://multimedia.3m.com/mws/media/1809244O/3m-pps-paint-preparation-system.pdf',
+  '100448': 'https://multimedia.3m.com/mws/media/1399545O/3m-216u-foam-backed-sheets-and-rolls-tds-ner.pdf',
+  '100469': 'https://multimedia.3m.com/mws/media/2544065O/3m-flexible-abrasive-foam-discs-and-sheets-tds-english-ceemea.pdf',
+  '100479': 'https://multimedia.3m.com/mws/media/2066582O?fn=J469728_SG_PSD_12_2890+Technical+Datasheet_V2-FV_LR_IT.pdf',
+  '100480': 'https://multimedia.3m.com/mws/media/2365987O/3M-Marine-Adhesive-Sealant-Fast-Cure-4200.pdf',
+  '100483': 'https://multimedia.3m.com/mws/media/2385130O/3m-peltor-x-series-earmuffs-datasheet-english.pdf',
+  '100486': 'https://multimedia.3m.com/mws/media/2544065O/3m-flexible-abrasive-foam-discs-and-sheets-tds-english-ceemea.pdf',
+  '100539': 'https://multimedia.3m.com/mws/media/1620091O/tds-36876-36877-36878-36879-36880-36881-36882-3m-self-stick-liquid-protection-fabric.pdf',
+  '100547': 'https://multimedia.3m.com/mws/media/1661771O/3m-vflex-technical-datasheet-master-en.pdf',
+  '100549': 'https://multimedia.3m.com/mws/media/1931571O/3m-cubitron-ii-hookit-disc-950u-technical-data-sheets-en-eu-0220.pdf',
+  '100550': 'https://multimedia.3m.com/mws/media/1792868O/dischi-e-fogli-abrasivi-clean-sanding-737u-3m-cubitron-ii-hookit-scheda-tecnica.pdf',
+  '100552': 'https://multimedia.3m.com/mws/media/2655975O/3m-hookit-blue-net-abrasives-tds-ner.pdf',
+  '100574': 'https://multimedia.3m.com/mws/media/1984101O/3m-perfect-it-gelcoat-compound-polish-tds-it.pdf',
+  '100578': 'https://multimedia.3m.com/mws/media/2655975O/3m-hookit-blue-net-abrasives-tds-ner.pdf',
+  '100589': 'https://multimedia.3m.com/mws/media/681574O/3m-reusable-respirator-6000ff-technical-datasheet-english-eu.pdf',
+  '100590': 'https://multimedia.3m.com/mws/media/1838923O/3m-half-mask-respirators-series-7500-technical-bulletin.pdf',
+  '100593': 'https://multimedia.3m.com/mws/media/2366336O/3m-general-purpose-vinyl-tape-764.pdf',
+  '100594': 'https://multimedia.3m.com/mws/media/2239892O/microsoft-word-3m-perfect-it-random-orbital-polishing-system-tds-en-eu-docx.pdf',
+  '100595': 'https://multimedia.3m.com/mws/media/2239892O/microsoft-word-3m-perfect-it-random-orbital-polishing-system-tds-en-eu-docx.pdf',
+  '100596': 'https://multimedia.3m.com/mws/media/2239892O/microsoft-word-3m-perfect-it-random-orbital-polishing-system-tds-en-eu-docx.pdf',
+  '100597': 'https://multimedia.3m.com/mws/media/2239892O/microsoft-word-3m-perfect-it-random-orbital-polishing-system-tds-en-eu-docx.pdf',
+  '100598': 'https://multimedia.3m.com/mws/media/2239892O/microsoft-word-3m-perfect-it-random-orbital-polishing-system-tds-en-eu-docx.pdf',
+  '100599': 'https://multimedia.3m.com/mws/media/1819422O/3m-soft-edge-masking-foam-tape-09678-09973-tds-ceemea.pdf',
+  '100619': 'https://multimedia.3m.com/mws/media/2364727O/3m-tack-cloth-aqua-50401-tds-it.pdf',
+  '100620': 'https://multimedia.3m.com/mws/media/2140050O/3m-performance-green-masking-tape-233-tds-ner.pdf',
+  '100621': 'https://multimedia.3m.com/mws/media/1399647O/3m-professional-panel-wipe-34567.pdf',
+  '100622': 'https://multimedia.3m.com/mws/media/934157O/4411n-extreme-sealing-tape-pdf.pdf',
+  '100639': 'https://multimedia.3m.com/mws/media/1160633O/scotchblue-pre-taped-masking-films-tech-data-sheet.pdf',
+  '100640': 'https://multimedia.3m.com/mws/media/1160633O/scotchblue-pre-taped-masking-films-tech-data-sheet.pdf',
+  '100645': 'https://multimedia.3m.com/mws/media/2070303O/3m-cubitron-ii-net-abrasive-tds-it.pdf',
+  '100658': 'https://multimedia.3m.com/mws/media/2569502O/3m-clean-sanding-system-pneumatic-and-electric-tools-brochure-lr-english.pdf',
+  '100659': 'https://multimedia.3m.com/mws/media/2569502O/3m-clean-sanding-system-pneumatic-and-electric-tools-brochure-lr-english.pdf',
+  '100669': 'https://multimedia.3m.com/mws/media/2006994O/3m-versaflo-tr-600-powered-air-turbo.pdf',
+  '100674': 'https://multimedia.3m.com/mws/media/2006992O/3m-versaflo-m-series-tds-in-italian.pdf',
+  '100675': 'https://multimedia.3m.com/mws/media/2548929O/3m-versaflo-s-series-headcovers-and-hoods-it.pdf',
+  '100696': 'https://multimedia.3m.com/mws/media/2409616O/3m-hookit-clean-sanding-multi-connection-disc-pad-sell-sheet-30062.pdf',
+  '130033': 'https://multimedia.3m.com/mws/media/1809161O/3m-glass-cleaner-08631-technical-datasheet.pdf',
+  '13009701': 'https://multimedia.3m.com/mws/media/2658867O/technical-datasheet-tds-147-doodlebug-kit-6474k-2026-pdf.pdf',
+  '13009702': 'https://multimedia.3m.com/mws/media/2658867O/technical-datasheet-tds-147-doodlebug-kit-6474k-2026-pdf.pdf',
+  '13009703': 'https://multimedia.3m.com/mws/media/2433624O/product-bulletin-3m-doodlebug-white-pad-8440.pdf',
+  '13009705': 'https://multimedia.3m.com/mws/media/867411O/3m-doodlebug-brown-scrub-n-strip-pad-8541-technical-data.pdf',
+  '160581': 'https://multimedia.3m.com/mws/media/1721739O/3m-dual-lock-reclosable-fasteners-technical-document.pdf',
+  '310106': 'https://multimedia.3m.com/mws/media/2388908O/3m-aluminium-foil-tape-1436-and-1436p-technical-data-sheet-english.pdf',
+  '31021601': 'https://multimedia.3m.com/mws/media/736220O/3m-scotch-weld-spraylim-77.pdf',
+  '31021603': 'https://multimedia.3m.com/mws/media/736222O/3m-scotch-weld-spraylim-90.pdf',
+  '310239': 'https://multimedia.3m.com/mws/media/2522999O/3m-value-duct-tape-1900.pdf',
+  '310379': 'https://multimedia.3m.com/mws/media/117314O/3m-bumpon-protective-products-molded-shapes-colored-and-clear.pdf',
+  '360175': 'https://multimedia.3m.com/mws/media/2015162O/scotch-rubber-splicing-tape-23-datasheet-en-eu.pdf',
+};
 const SCHEDE = [
   [/^SMALTO POLIURETANICO BOERO 953/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Smalto-poliuretanico.pdf'],
   [/^BOERO FRESH WATER/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Boero-Fresh-Water-EU.pdf'],
@@ -4429,6 +4534,7 @@ function explain(i) {
   const ROW = r.f.map(([k, v]) => v).join(' ').toUpperCase();
   const pr = PROD.find(([re, , rx]) => re.test(NAME) && (!rx || rx.test(ROW)));
   if (pr) { o.verif = pr[1].dati; o.fonte = pr[1].fonte; o.scheda = pr[1].url || ''; }
+  if (!o.scheda) o.scheda = SCH_CODE[r.c] || SCH_CODE[r.c.slice(0, 6)] || '';
   if (!o.scheda) { const sc = SCHEDE.find(([re, rx]) => re.test(NAME) && (!rx || rx.test(ROW))); o.scheda = sc ? sc[2] : ''; }
   o.scheda = o.scheda || '';
   o.mats = []; for (const [re, t] of MATS) { if (!o.mats.length && re.test(NAME)) o.mats.push(t); }
@@ -4598,7 +4704,7 @@ const SCH_BASE = (/\/prova\/v\d+\//.test(location.href) ? location.href.split('/
 const schName = u => { let x = 0x811c9dc5; for (let k = 0; k < u.length; k++) { x ^= u.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16).padStart(8, '0'); };
 // sheets the copy job could not fetch (producer site refused it): opened on the producer's site instead
 const NO_COPY = new Set(['8dc979fc']);
-const isPdf = u => /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS/i.test(u);
+const isPdf = u => /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS|3m\.com\/mws\/mediawebserver/i.test(u);
 let schDb = null;
 function db() {
   if (schDb) return schDb;
@@ -4695,6 +4801,7 @@ async function fetchAllSheets() {
     const urls = new Set();
     for (const [, v] of PROD) if (v && v.url) urls.add(v.url);
     for (const x of SCHEDE) urls.add(x[2]);
+    for (const u of Object.values(SCH_CODE)) urls.add(u);
     for (const u of urls) {
       if (!isPdf(u) || NO_COPY.has(schName(u))) continue;
       const nm = schName(u); if (await dbGet('pdf:' + nm)) continue;
@@ -4704,6 +4811,22 @@ async function fetchAllSheets() {
   } finally { fetchingAll = false; }
 }
 setTimeout(() => (window.requestIdleCallback || (f => f()))(() => { fetchAllSheets().catch(() => {}); }), 8000);
+// ---- vague queries: everyday words of shop staff and customers mapped to the catalogue's own words
+const XSYN = [['battagli', 'mh'], ['maglietta', 'magliette', 'maietta', 'majetta', 'maglieta', 'tshirt', 'shirt'], ['quaderno', 'taccuino', 'appunti', 'notes'],
+  ['shoppers', 'shopper', 'sporta', 'sportina'], ['imballo', 'imballaggio', 'pacchi', 'pacco', 'spedizioni'], ['altoparlante', 'altoparlanti', 'casse', 'cassa', 'speaker', 'speakers'],
+  ['antiscivolo', 'antisdrucciolo', 'grip'], ['wc', 'toilet', 'toilette', 'gabinetto', 'cesso'], ['girante', 'giranti', 'impeller', 'ventola'],
+  ['bocchettone', 'bocchettoni', 'imbarco', 'riempimento'], ['passouomo', 'passauomo', 'boccaporto', 'botola']];
+for (const g of XSYN) for (const w of g) SYNMAP.set(w, [...new Set([...(SYNMAP.get(w) || [w]), ...g])]);
+const FILL = new Set(['tantissimo', 'tanto', 'molto', 'tiene', 'tengono', 'servono', 'qualcosa', 'roba', 'cosa', 'quel', 'quei', 'quelle', 'quelli', 'come', 'dove', 'mio', 'mia', 'buono', 'buona', 'bello', 'bella', 'ottimo', 'ottima', 'migliore', 'qualsiasi', 'anche', 'oppure', 'please', 'grazie', 'cerca', 'trova', 'voglio', 'avete', 'hai']);
+const XPHR = [[/\bt[\s-]?shirts?\b/g, 'maglietta'], [/\bpass[aoe]\s?uomo\b/g, 'passo uomo'], [/\bgancio a molla\b/g, 'moschettone'], [/\bcarta (da )?vetro\b/g, 'carta abrasiva'],
+  [/\bblocc(o|hi) (per )?appunti\b/g, 'block notes'], [/\bborsa (della |per la |per )?spesa\b/g, 'shoppers'], [/\bnastro (da |per )?(pacchi|imballo|imballaggio)\b/g, 'nastro imballo'],
+  [/\bcasse (audio|stereo)\b/g, 'altoparlanti'], [/\bacqua (sporca|di sentina|dal fondo|nel fondo)\b/g, 'sentina'], [/\btelo (da )?(spiaggia|bagno)\b/g, 'telo mare'],
+  [/\b(scritta|logo|marchio|marcat[aoie]|brand) battagli\b/g, 'mh'], [/\bmarine hardware\b/g, 'mh'], [/\bcopri\s?barca\b/g, 'telo copertura'], [/\bscalett[ae] (da |per (il )?)?bagno\b/g, 'scaletta'], [/\bwater (marino|nautico|di bordo|elettrico|manuale)\b/g, 'wc $1']];
+const BOAT = /^(barca|barche|imbarcazione|imbarcazioni|natante|natanti|bordo)$/;
+const fixQ = q => { let t = ' ' + String(q || '').toLowerCase() + ' '; for (const [re, to] of XPHR) t = t.replace(re, to);
+  // "per la barca" is true of the whole catalogue: dropped when the query has other words
+  const w = t.trim().split(/\s+/), keep = w.filter(x => !BOAT.test(x) && !FILL.has(x)); return (keep.some(x => !STOP.has(x)) ? keep : w).join(' '); };
+if (typeof window.search === 'function') { const S0 = window.search; window.search = function (q, qd) { return S0.call(this, q, qd ? fixQ(qd) : qd); }; }
 window.VelaInfo = { explain, sections, open, mount, openSheet };
 const orig = window.openRow;
 window.openRow = function (i) { const r = orig.apply(this, arguments); try { mount(i); } catch (err) { console.warn('info', err); } return r; };
