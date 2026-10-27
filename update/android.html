@@ -980,15 +980,27 @@ function idb() {
   });
   return idbP;
 }
-async function idbGet(k) { try { const d = await idb(); return await new Promise((res, rej) => { const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch { return undefined; } }
-async function idbSet(k, v) { try { const d = await idb(); await new Promise((res, rej) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); return true; } catch { return false; } }
-async function idbDel(k) { try { const d = await idb(); await new Promise(res => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').delete(k); t.oncomplete = res; t.onerror = res; }); } catch {} }
+let IDXMEMO;  // the index read once, until it is written again
+async function idbGet(k) { if (k === 'index' && IDXMEMO) return IDXMEMO; const v = await idbGet0(k); if (k === 'index' && v) IDXMEMO = v; return v; }
+async function idbGet0(k) { try { const d = await idb(); return await new Promise((res, rej) => { const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch { return undefined; } }
+async function idbSet(k, v) { if (k === 'index') IDXMEMO = undefined; try { const d = await idb(); await new Promise((res, rej) => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); return true; } catch { return false; } }
+async function idbDel(k) { if (k === 'index') IDXMEMO = undefined; try { const d = await idb(); await new Promise(res => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').delete(k); t.oncomplete = res; t.onerror = res; }); } catch {} }
 function lsGet(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 
 // ---------- index ----------
+// saved search lists: valid for one catalogue (date, version, size) and one version of the search code
+let PRE = null;
+let PRE_SIG = '';
+const preSig = () => PRE_SIG || (PRE_SIG = (() => { const t = [normText, words, fmtCode, fold, buildVocab].map(f => String(f)).join('|') + [...STOP].join(','); let x = 0x811c9dc5; for (let k = 0; k < t.length; k++) { x ^= t.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16); })());
+const preKey = idx => [preSig(), idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
+let preT = 0;
+function savePre(idx) { clearTimeout(preT); const key = preKey(idx), d = { key, HAY, HAYT, HAYS, V: [...VOCAB] }; preT = setTimeout(() => { if (INDEX === idx) idbSet('pre', d); }, 4000); }
 function setIndex(idx, meta) {
   INDEX = idx; META = meta || META;
+  const pre = PRE && !idx.example && PRE.key === preKey(idx) ? PRE : null; PRE = null;
+  if (pre) { HAY = pre.HAY; HAYT = pre.HAYT; HAYS = pre.HAYS; buildVocab(new Map(pre.V)); }
+  else {
   HAY = idx.rows.map(r => {
     const b = idx.blocks[r.b] || {};
     return normText([fmtCode(r.c), b.t, b.s, b.d, r.f.map(x => x[1]).join(' ')].join(' '));
@@ -996,6 +1008,8 @@ function setIndex(idx, meta) {
   HAYT = idx.rows.map(r => { const b = idx.blocks[r.b] || {}; return normText([b.t, b.s].join(' ')); });
   HAYS = HAY.map(h => words(h).filter(w => !STOP.has(w)).join(' '));
   buildVocab();
+  if (!idx.example) savePre(idx);
+  }
   pdfDoc = null; pdfDocKey = null; IMGBOX.clear(); THUMB.clear();
   renderCatalog(); renderReparti(); renderRecent(); runSearch();
   visReset(); $('photoRow').hidden = !!idx.example;
@@ -1082,9 +1096,9 @@ function stem(w) {
 }
 const COMPOUND = /^(porta|passa|para|copri|salva|anti|auto|semi|super|mini|maxi|multi|tira|ferma|blocca|tendi|reggi|lava|tappa|sali|guida|segna|mezzo|ammortizza|sgancia|aggancia)/;
 let STEMS = new Map();
-function buildVocab() {
-  const m = new Map();
-  HAY.forEach((h, i) => { for (const w of new Set(words(h))) { let a = m.get(w); if (!a) m.set(w, a = []); a.push(i); } });
+function buildVocab(pm) {
+  const m = pm || new Map();
+  if (!pm) HAY.forEach((h, i) => { for (const w of new Set(words(h))) { let a = m.get(w); if (!a) m.set(w, a = []); a.push(i); } });
   VOCAB = m;
   STEMS = new Map();
   for (const w of m.keys()) { if (/^\d/.test(w)) continue; const st = stem(w); let a = STEMS.get(st); if (!a) STEMS.set(st, a = []); a.push(w); }
@@ -1106,7 +1120,13 @@ function editLE(a, b, k) {
   return prev[b.length] <= k;
 }
 // rows matching one query word -> Map(row -> strength)
+let MWV = null, MWC = new Map();
 function matchWord(t) {
+  if (MWV !== VOCAB || MWC.size > 400) { MWV = VOCAB; MWC = new Map(); }
+  let m = MWC.get(t); if (!m) MWC.set(t, m = matchWord0(t));
+  return new Map(m);
+}
+function matchWord0(t) {
   const out = new Map();
   const add = (w, str) => { const rs = VOCAB.get(w); if (rs) for (const r of rs) if ((out.get(r) || 0) < str) out.set(r, str); };
   if (/^\d+(\.\d+)?$/.test(t)) { add(t, 1); return out; }
@@ -1699,6 +1719,116 @@ async function readCodes(cv, have, onHit, isLive) {
   }
   return { codes: got, near: got.length ? [] : nearCodes([...near], have), text: good.join(' ') };
 }
+// ---------- what is written on a box -> the catalogue article ----------
+// Every catalogue row is described by its words: the title of its block, its sizes and colours.
+// The words read on a box (brand, model, size, colour, also in English) are weighed by how rare they are
+// in the catalogue (POLYFORM, M66, AQUAKEM count a lot, MADE or BLACK little); sizes with their unit must
+// agree (Ft 22 -> 22', 6x2L -> 2 LT). Spelling slips of the reader (THETFIRD) are forgiven.
+const BOX_EN = {
+  WHITE: 'BIANCO BIANCA BIANCHI', BLUE: 'BLU', NAVY: 'BLU NAVY', BLACK: 'NERO NERA NERI', RED: 'ROSSO ROSSA', GREEN: 'VERDE', YELLOW: 'GIALLO',
+  GREY: 'GRIGIO', GRAY: 'GRIGIO', ORANGE: 'ARANCIO ARANCIONE', SILVER: 'ARGENTO', CLEAR: 'TRASPARENTE', TRANSPARENT: 'TRASPARENTE',
+  OAR: 'REMO REMI', OARS: 'REMO REMI', PADDLE: 'PAGAIA', ALUMINUM: 'ALLUMINIO', ALUMINIUM: 'ALLUMINIO', STAINLESS: 'INOX', STEEL: 'ACCIAIO', BRASS: 'OTTONE', NYLON: 'NYLON',
+  CABLE: 'CAVO', STEERING: 'MONOCAVO TIMONERIA', REMOTE: 'TELECOMANDO', CONTROL: 'COMANDO', FENDER: 'PARABORDO PARABORDI', FENDERS: 'PARABORDI', COVER: 'COPRIPARABORDO COPERTURA',
+  ROPE: 'CIMA', LINE: 'CIMA', ANCHOR: 'ANCORA', CHAIN: 'CATENA', SHACKLE: 'GRILLO GRILLI', SNAP: 'MOSCHETTONE', HOOK: 'GANCIO', CLEAT: 'GALLOCCIA', BOLLARD: 'BITTA',
+  HINGE: 'CERNIERA', HATCH: 'OSTERIGGIO BOTOLA', DOOR: 'SPORTELLO', HANDLE: 'MANIGLIA', LOCK: 'SERRATURA', HOSE: 'TUBO', PIPE: 'TUBO', PUMP: 'POMPA', BILGE: 'SENTINA',
+  VALVE: 'VALVOLA', FILTER: 'FILTRO', LIGHT: 'LUCE FANALE', LAMP: 'LAMPADA', BULB: 'LAMPADINA', SWITCH: 'INTERRUTTORE', BATTERY: 'BATTERIA', CHARGER: 'CARICABATTERIE',
+  SCREW: 'VITE VITI', SCREWS: 'VITI', BOLT: 'BULLONE', NUT: 'DADO DADI', WASHER: 'RONDELLA RONDELLE', MASK: 'MASCHERA', GLOVES: 'GUANTI', BRUSH: 'PENNELLO PENNELLI',
+  CLEANER: 'PULITORE DETERGENTE', POLISH: 'LUCIDANTE', WAX: 'CERA', PAINT: 'VERNICE PITTURA', ANTIFOULING: 'ANTIVEGETATIVA', PRIMER: 'FONDO PRIMER', THINNER: 'DILUENTE DILUENTI',
+  FLAG: 'BANDIERA', HORN: 'TROMBA', COMPASS: 'BUSSOLA', LADDER: 'SCALETTA', SEAT: 'SEDILE', TABLE: 'TAVOLO', BOATHOOK: 'MEZZO MARINAIO', TOILET: 'WC', TANK: 'SERBATOIO',
+  FEET: 'FT', FOOT: 'FT', BRIGHTENER: 'BRIGHTNER', KIT: 'KIT', SET: 'SET', PAIR: 'COPPIA'
+};
+const bmNorm = t => String(t).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// words of a text; "2,5" -> "2.5"; glued words split where letters meet a size ("MACH5FT.13" keeps MACH5, FT, 13)
+function bmToks(t) {
+  t = bmNorm(t).replace(/(\d),(\d)/g, '$1.$2').replace(/(\d)\.(?!\d)/g, '$1 ').replace(/([A-Z])\.(?=\d)/g, '$1 ')
+    .replace(/(\d)(FT|MM|CM|MT|LT|KG|GR|GAL)\b/g, '$1 $2').replace(/\b(FT|MM|CM|MT|LT|KG|GR)(\d)/g, '$1 $2');
+  return t.split(/[^A-Z0-9.+'"°/]+/).flatMap(w => w.split('/')).map(w => w.replace(/^[.'"+]+|[.'"]+$/g, '')).filter(w => w && (w.length >= 2 || /\d/.test(w)));
+}
+// sizes with a unit, as plain "number|unit" keys: 22' and Ft 22 -> 22|FT, 2 LT and 2L -> 2|L
+const BM_UNIT = { FT: 'FT', "'": 'FT', PIEDI: 'FT', L: 'L', LT: 'L', LITRI: 'L', LITRO: 'L', ML: 'ML', MM: 'MM', CM: 'CM', M: 'M', MT: 'M', METRI: 'M', KG: 'KG', G: 'G', GR: 'G', GAL: 'GAL', GALLONI: 'GAL', '"': 'IN', IN: 'IN', W: 'W', V: 'V', A: 'A' };
+function bmSizes(t) {
+  const s = bmNorm(t).replace(/(\d),(\d)/g, '$1.$2'), out = new Set(); let m;
+  const re = /(\d+(?:\.\d+)?)\s*(FT|PIEDI|LT|LITRI|LITRO|ML|MM|CM|MT|METRI|KG|GR|GAL|GALLONI|L|M|G|W|V|IN|'|")(?![A-Z])/g;
+  while ((m = re.exec(s))) out.add(+m[1] + '|' + BM_UNIT[m[2]]);
+  const re2 = /\b(FT|FEET|LT|L|KG|GAL)\.?\s*(\d+(?:\.\d+)?)/g; // "Ft. 22", "L 2"
+  while ((m = re2.exec(s))) out.add(+m[2] + '|' + BM_UNIT[m[1] === 'FEET' ? 'FT' : m[1]]);
+  const re3 = /(\d+)\s*X\s*(\d+(?:\.\d+)?)\s*(LT|L|KG|ML)/g; // "6x2L": packs of 2 L
+  while ((m = re3.exec(s))) out.add(+m[2] + '|' + BM_UNIT[m[3]]);
+  return out;
+}
+let BM = null;
+function bmIndex() {
+  if (BM && BM.at === INDEX.at && BM.n === INDEX.rows.length) return BM;
+  const rows = INDEX.rows, inv = new Map(), dfB = new Map(), del = new Map(), sizes = [];
+  rows.forEach((r, i) => {
+    const title = (INDEX.blocks[r.b] || {}).t || '', fields = (r.f || []).filter(([k]) => !/prezzo/i.test(k));
+    const text = title + ' ' + fields.map(([k, v]) => v).join(' ');
+    const toks = new Set(bmToks(text));
+    // glued words of the title are also known split ("AQUAKEM" is found from "AQUA KEM" and the other way round)
+    const tt = bmToks(title); for (let j = 0; j + 1 < tt.length; j++) if (/[A-Z]/.test(tt[j]) && tt[j].length + tt[j + 1].length <= 14) toks.add(tt[j] + tt[j + 1]);
+    for (const t of toks) { let a = inv.get(t); if (!a) inv.set(t, a = []); a.push(i); }
+    sizes.push(bmSizes(fields.map(([k, v]) => /piedi/i.test(k) ? v + "'" : /litri|\(l\)/i.test(k) ? v + ' L' : v).join(' ') + ' ' + title));
+  });
+  for (const [t, a] of inv) { const bs = new Set(); for (const i of a) bs.add(rows[i].b); dfB.set(t, bs.size); }
+  // a word read with one letter wrong, missing or extra still finds its catalogue word
+  for (const t of inv.keys()) if (t.length >= 5 && /^[A-Z]+$/.test(t)) for (let k = 0; k < t.length; k++) { const d = t.slice(0, k) + t.slice(k + 1); let a = del.get(d); if (!a) del.set(d, a = []); a.push(t); }
+  const NB = new Set(rows.map(r => r.b)).size;
+  return BM = { at: INDEX.at, n: rows.length, inv, dfB, del, sizes, NB };
+}
+function bmLookup(I, w) {
+  if (I.inv.has(w)) return [[w, 1]];
+  if (w.length < 5 || !/^[A-Z]+$/.test(w)) return [];
+  const out = new Map();
+  for (const t of I.del.get(w) || []) out.set(t, 0.8); // one letter extra
+  for (let k = 0; k < w.length; k++) { const d = w.slice(0, k) + w.slice(k + 1); if (I.inv.has(d)) out.set(d, 0.8); for (const t of I.del.get(d) || []) if (t.length === w.length) out.set(t, 0.75); }
+  return [...out];
+}
+// best articles for the text read on a box: [{ i, score, sure }], one per article family, best first
+function boxFind(text) {
+  if (!INDEX || !INDEX.rows || !INDEX.rows.length) return [];
+  const I = bmIndex(), lines = String(text).split('\n'), raw = [], lineOf = new Map();
+  lines.forEach((l, n) => { for (const w of bmToks(l)) { raw.push(w); if (!lineOf.has(w)) lineOf.set(w, []); lineOf.get(w).push(n); } });
+  const lineSz = lines.map(bmSizes);
+  // box words, with English words also in Italian and neighbours glued (AQUA KEM -> AQUAKEM, MACH 5 -> MACH5)
+  const words = new Map(); // catalogue word -> weight factor
+  const from = new Map(); // catalogue word -> lines of the box where it was read
+  const add = (w, f, src) => { for (const [t, q] of bmLookup(I, w)) { words.set(t, Math.max(words.get(t) || 0, f * q)); from.set(t, (from.get(t) || []).concat(lineOf.get(src) || [])); } };
+  raw.forEach((w, j) => {
+    if (/^\d{5,}$/.test(w) || /^\d+[./]\d+[./]\d+$/.test(w)) return; // barcodes, dates, part numbers
+    add(w, 1, w);
+    const nm = /^(\d{2,4})[A-Z]$/.exec(w); if (nm) add(nm[1], 1, w); // "150Z": a reader slip after a size
+    if (BOX_EN[w]) for (const it of BOX_EN[w].split(' ')) add(it, 0.9, w);
+    if (j + 1 < raw.length && /[A-Z]/.test(w) && w.length + raw[j + 1].length <= 14) add(w + raw[j + 1], 1, w);
+  });
+  const score = new Map(), where = new Map();
+  for (const [t, f] of words) {
+    const df = I.dfB.get(t) || 1, idf = Math.log(I.NB / df);
+    if (idf < 1.2) continue; // MADE, IN, PZ...
+    const w = (/^\d+(\.\d+)?$/.test(t) ? 0.35 : 1) * f * idf;
+    for (const i of I.inv.get(t)) { score.set(i, (score.get(i) || 0) + w); if (idf >= 4) where.set(i, (where.get(i) || []).concat(from.get(t) || [])); }
+  }
+  if (!score.size) return [];
+  // sizes written with their unit must agree with the article's, read next to the article's own words (one box among many)
+  for (const [i, s] of score) {
+    const near = new Set(); for (const n of where.get(i) || []) for (let k = n - 2; k <= n + 2; k++) if (lineSz[k]) for (const z of lineSz[k]) near.add(z);
+    let b = 0; for (const k of near) if (I.sizes[i].has(k)) b += 2.5; score.set(i, s + b);
+  }
+  const ranked = [...score].sort((a, b) => b[1] - a[1]);
+  const out = [], seen = new Set();
+  for (const [i, s] of ranked) { const b = INDEX.rows[i].b; if (seen.has(b)) continue; seen.add(b); out.push({ i, score: s }); if (out.length >= 4) break; }
+  // sure: a telling match, clearly ahead of any other article
+  if (out[0]) { const s0 = out[0].score, s1 = out[1] ? out[1].score : 0, sameB = ranked.find(([i]) => i !== out[0].i && INDEX.rows[i].b === INDEX.rows[out[0].i].b); out[0].sure = s0 >= 9 && s0 - s1 >= 3 && (!sameB || s0 - sameB[1] >= 1.5); }
+  return out;
+}
+
+// the box matcher first, then the older description search, one article per family
+function camTextFind(text) {
+  const bx = boxFind(text).filter(x => x.score >= 6), out = [], seen = new Set();
+  const add = i => { const b = INDEX.rows[i].b, k = b >= 0 ? b : 'r' + i; if (seen.has(k)) return; seen.add(k); out.push(i); };
+  for (const x of bx) add(x.i);
+  for (const i of textFind(text)) { if (out.length >= 4) break; add(i); }
+  return { list: out.slice(0, 4), sure: !!(bx[0] && bx[0].sure) };
+}
 // ---------- strong reader (PP-OCR) ----------
 const PP_BASES = ['./lib/pp/', 'https://serginolimoncino.github.io/battagli-cliente/lib/pp/'];
 let ppP = null;
@@ -1896,7 +2026,9 @@ async function camAnalyze(cv, big, preCode) {
   if (preCode) { codes.push(preCode); showCodes('barcode'); }
   const codeJob = (preCode ? Promise.resolve({ codes: [], near: [], text: '' }) : readCodes(big || cv, codeSet(), (c, how) => { if (!live()) return; codes.push(c); showCodes(how); }, live)).then(r => {
     if (!live() || codes.length) return;
-    const found = textFind(r.text), near = r.near.filter(c => codeSet().has(c)), textFirst = found.length && r.nearCost >= 5;
+    const tf = camTextFind(r.text), found = tf.list, near = r.near.filter(c => codeSet().has(c)), textFirst = found.length && (tf.sure || r.nearCost >= 5);
+    // a half-read code: the brother named by the box text comes first
+    if (near.length > 1 && found.length) { const k = near.findIndex(c => found.some(i => INDEX.rows[i].c === c)); if (k > 0) near.unshift(near.splice(k, 1)[0]); }
     let html = '';
     const nearH = near.length ? `<h3 class="sec-title"><span>Codice letto in parte: forse è</span></h3><div class="list">${near.map(c => itemBtn(INDEX.rows.findIndex(x => x.c === c))).join('')}</div>` : '';
     const foundH = found.length ? `<h3 class="sec-title"><span>Dal testo sulla foto</span></h3><div class="list">${found.map(itemBtn).join('')}</div>` : '';
@@ -2230,7 +2362,38 @@ async function renderBox(page, box, maxW) {
   enhance(cv);
   return cv.toDataURL('image/jpeg', .9);
 }
-function thumbFor(row, maxW) {
+// ---- photos kept on the device ----
+let fotoP = null; const FOTO_MAX = 40 * 1024 * 1024; let fotoMeta = null, fotoMetaT = 0;
+function fotoDb() { if (!fotoP) fotoP = new Promise((res, rej) => { try { const r = indexedDB.open('battagli-foto', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); return fotoP; }
+async function fotoGet(k) { try { const d = await fotoDb(); return await new Promise(res => { const q = d.transaction('f').objectStore('f').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } }
+async function fotoPut(k, v) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); t.objectStore('f').put(v, k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
+async function fotoDel(ks) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); for (const k of ks) t.objectStore('f').delete(k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
+async function fotoTouch(k, size) {
+  if (!fotoMeta) fotoMeta = (await fotoGet('__meta')) || {};
+  const at = '|' + INDEX.at, old = Object.keys(fotoMeta).filter(x => !x.endsWith(at));  // photos of an older catalogue
+  if (size != null) fotoMeta[k] = [size, Date.now()]; else if (fotoMeta[k]) fotoMeta[k][1] = Date.now(); else return;
+  let tot = 0; for (const x in fotoMeta) tot += fotoMeta[x][0];
+  const drop = old.slice();
+  if (tot > FOTO_MAX) for (const x of Object.keys(fotoMeta).sort((a, b) => fotoMeta[a][1] - fotoMeta[b][1])) { if (tot <= FOTO_MAX * .9) break; if (x === k || drop.includes(x)) continue; drop.push(x); tot -= fotoMeta[x][0]; }
+  for (const x of drop) delete fotoMeta[x];
+  if (drop.length) await fotoDel(drop);
+  clearTimeout(fotoMetaT); fotoMetaT = setTimeout(() => fotoPut('__meta', fotoMeta), 800);
+}
+function kept(key, make) {
+  if (THUMB.has(key)) return THUMB.get(key);
+  const p = fotoGet(key).then(c => {
+    if (c !== undefined) { fotoTouch(key); return c; }
+    THUMB.delete(key);
+    return make().then(v => { if (v && v.length) {  // only real photos are kept: an empty result is worked out again next time
+ fotoPut(key, v); fotoTouch(key, JSON.stringify(v).length); } return v; });
+  });
+  THUMB.set(key, p);
+  return p;
+}
+function thumbFor(row, maxW) { return kept(row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => thumbFor0(row, maxW)); }
+function photosFor(row, maxW) { return kept('all|' + row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => photosFor0(row, maxW)); }
+function warmPdf() { setTimeout(() => (window.requestIdleCallback || (f => f()))(async () => { try { if (!INDEX.example && (await idbGet('pdfKey')) === INDEX.at) getPdfForView(); } catch (e) {} }), 2500); }
+function thumbFor0(row, maxW) {
   const key = row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at;
   if (THUMB.has(key)) return THUMB.get(key);
   const p = thumbQ.then(async () => {
@@ -2246,7 +2409,7 @@ function thumbFor(row, maxW) {
   thumbQ = p.then(() => {}, () => {});
   return p;
 }
-function photosFor(row, maxW) {
+function photosFor0(row, maxW) {
   const key = 'all|' + row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at;
   if (THUMB.has(key)) return THUMB.get(key);
   const p = thumbQ.then(async () => {
@@ -2708,7 +2871,9 @@ async function siteCatalog() {
   return true;
 }
 (async function boot() {
-  try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { overlay(false); }
+  let hasCat = false; try { const c = await idbGet('index'); hasCat = !!(c && c.rows && c.rows.length && !c.example); } catch (e) {}
+  if (!hasCat) { try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { overlay(false); } }
+  else setTimeout(() => siteCatalog().then(r => { if (r) location.reload(); }, () => overlay(false)), 2500);
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
   try { if (APP && APP.importBusy()) overlay(true, 'Preparo il catalogo', 'Apro il catalogo ricevuto…', 0.05); } catch {}
   try {
@@ -2727,7 +2892,7 @@ async function siteCatalog() {
   try { await upgradeIndex(); } catch (e) { overlay(false); }
   setIndex(EXAMPLE, {});
   const idx = await idbGet('index');
-  if (idx && idx.rows && idx.rows.length) setIndex(idx, (await idbGet('meta')) || {});
+  if (idx && idx.rows && idx.rows.length) { try { PRE = await idbGet('pre'); } catch (e) { PRE = null; } setIndex(idx, (await idbGet('meta')) || {}); warmPdf(); }
   const h = decodeURIComponent(location.hash.slice(1));
   if (h) { const d = digitsOf(h); const i = INDEX.rows.findIndex(r => r.c === d); if (i >= 0) openRow(i, true); }
   if (window.claude && typeof window.claude.use === 'function') {
@@ -2933,7 +3098,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 23, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 24, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -2981,4 +3146,1567 @@ setTimeout(updAuto, 4000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) updAuto(); });
 </script>
 
-</body></html>
+<script>
+// "Più info": the extra information sheet of the article page, opened from the sail button.
+// Everything is written here in advance and shown instantly: no external call, no live AI,
+// and no exact figure that the catalogue or the maker's data sheet does not give.
+(function () {
+const SAIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5v15H4.5z" fill="currentColor" fill-opacity=".25"/><path d="M13 5.5l6 12h-6z" fill="currentColor" fill-opacity=".25"/><path d="M3 19.5h18l-2.2 2.5H5.2z"/></svg>';
+
+// Per family: cosa · dove · quanto (how much / what size) · uso (fitting, application)
+// · altri (other uses) · manut (maintenance, checks, expiry) · sapere (what to tell the customer).
+// Short entries are fine: a screw does not need a page.
+const FAM = [
+['dpi', /MASCHERIN|SEMIMASCHER|MASCHERA (ANTIPOLVERE|FFP)|FILTR[OI] (ANTIPOLVERE|PER MASCHER)|OCCHIAL[EI] (PROTETT|DI PROTEZ|DA LAVORO)|CUFFIE ANTIRUMOR|TUT[AE] (USA|PROTETT|VERNICIATOR)|GUANT/, ['10', '13', '31'], {
+  cosa: 'Protezione individuale per chi lavora: maschera, occhiali, guanti o tuta.',
+  dove: 'Durante carteggiatura, verniciatura, uso di solventi e lavori di manutenzione.',
+  quanto: 'Guanti e mascherine sono materiale di consumo: si vendono a confezione.',
+  sapere: ['La maschera va abbinata al filtro adatto al prodotto che si usa.', 'Le protezioni da usare con ogni prodotto sono indicate nella sua scheda di sicurezza.'] }],
+['pile', /\b(DURACELL|STILO|MINISTILO|ALCALINE|PILE)\b|BATTERIE (RICARICABILI|ALCALINE|DURACELL|HEAVY DUTY|LITIO)/, ['25', '04', '07'], {
+  cosa: 'Pile di uso comune per torce, strumenti portatili e piccoli apparecchi di bordo.',
+  dove: 'Torce, VHF portatili, luci di emergenza, telecomandi.',
+  quanto: 'Conviene tenerne di scorta nei formati usati dalle dotazioni di bordo.',
+  sapere: ['Si tengono all\'asciutto e si tolgono dagli apparecchi lasciati fermi a lungo, per evitare perdite di liquido.'] }],
+['coltello', /COLTELL|LAMA DA|TRONCHESE|CESOI|PINZA (MULTIUSO|UNIVERSALE)|UTENSIL/, ['36', '42', '43', '07', '31'], {
+  cosa: 'Coltello o utensile da taglio.',
+  uso: 'Dopo l\'uso in mare va sciacquato in acqua dolce.',
+  sapere: ['Le versioni inox resistono meglio al salino ma vanno comunque sciacquate.'] }],
+['utensili', /PUNT[AE] |PUNTE |CHIAV[EI]|TRAPANO|AVVITATOR|SEGHETT|LEVIGATRIC|SMERIGLIATRIC|MULTIFUNZIONE|FRES[AE]|SCALPELL|PIALLETT|STRETTO|MARTELL|CACCIAVIT|GIRAVIT|SET UTENSIL|PINZ[AE]|TRONCHESIN|BRUGOL|CRICCHETT|BUSSOL[AE] CH|TAZZA/, ['10', '31', '02', '37'], {
+  cosa: 'Attrezzo da lavoro o punta per forare, tagliare, avvitare e smontare.',
+  dove: 'In officina e a bordo, nella cassetta degli attrezzi.',
+  quanto: 'Le punte e le lame sono materiale di consumo: conviene avere le misure più usate e qualche ricambio.',
+  uso: 'Sulle punte conta il materiale da forare: per l\'inox si va piano, con pressione costante e, se possibile, con lubrificante.',
+  altri: 'Gli stessi attrezzi servono per lavori in casa e sul carrello.',
+  manut: 'A bordo gli attrezzi vanno asciugati e protetti con uno spray antiumidità, altrimenti arrugginiscono.',
+  sapere: ['Per i fori in coperta conviene sempre sigillare il foro dopo aver forato.'] }],
+['candela', /CANDEL[AE]|NGK|BUGIE/, ['31'], {
+  cosa: 'Candela di accensione per motori a benzina, entrobordo o fuoribordo.',
+  dove: 'Sul motore.',
+  quanto: 'Una per cilindro, e si sostituiscono tutte insieme; conviene tenerne un set di scorta a bordo.',
+  uso: 'Si sostituiscono a motore freddo, con la chiave della misura giusta e serrando senza esagerare.',
+  manut: 'Si cambiano agli intervalli indicati dal costruttore del motore, o prima se il motore parte male.',
+  sapere: ['Il tipo di candela deve essere quello indicato per quel motore: il grado termico non è intercambiabile.', 'L\'aspetto della candela smontata dice molto su come sta girando il motore.'] }],
+['cinghia', /CINGHI[AE] TRAPEZOIDAL|CINGHIE TRAPEZOIDAL|CINGHIA DI DISTRIB|CINGHIE SEZIONE/, ['31'], {
+  cosa: 'Cinghia di trasmissione del motore: porta il moto agli organi ausiliari, come l\'alternatore.',
+  dove: 'Sul motore.',
+  quanto: 'Una per trasmissione, più una di scorta a bordo: è un pezzo che lascia a piedi quando si rompe.',
+  uso: 'Si monta con la tensione indicata dal costruttore del motore.',
+  manut: 'Si controlla a ogni tagliando: se è lucida, screpolata o lascia polvere nera va sostituita.',
+  sapere: ['La misura (sezione e sviluppo) deve essere identica all\'originale.'] }],
+['lettere', /CARATTER[EI] ADESIV|LETTERE ADESIV|NUMERI ADESIV|GOMFIX|NASTRO PER LINEE DI GALLEGGIAMENTO|ADESIV[OI] (NUMERI|SIGLA)/, ['07', '10'], {
+  cosa: 'Caratteri o nastro adesivo per scrivere sigla, nome e linee sullo scafo.',
+  dove: 'Sulle murate e sulla linea di galleggiamento.',
+  quanto: 'Si contano i caratteri che servono per la sigla, considerando che vanno su tutte e due le murate; l\'altezza regolamentare dipende dal tipo di unità.',
+  uso: 'Si applicano su superficie pulita, sgrassata e asciutta, segnando prima la linea con nastro carta, e si schiacciano bene partendo dal centro.',
+  sapere: ['Le sigle di identificazione hanno misure e posizione previste dalla normativa: conviene verificarle prima di applicarle.'] }],
+['quadro', /QUADR[OI] ELETTRIC|PANNELL[OI] (ELETTRIC|INTERRUTT|DI COMANDO|DI CONTROLLO|COMANDI|DISTRIBUZ|PCB|ELITE|A BASCULA)/, ['25'], {
+  cosa: 'Pannello di comando e distribuzione: raccoglie in un unico punto gli interruttori, e spesso anche le protezioni, delle utenze elettriche di bordo (luci, pompe, strumenti, frigo).',
+  dove: 'Impianti elettrici navali: quadro di bordo, plancia o paratia vicino alla postazione di guida.',
+  quanto: 'Una via per ogni utenza da comandare, più una o due libere per aggiunte future. Numero di interruttori e dimensioni di foratura sono nelle varianti.',
+  uso: 'Si incassa nella paratia con il foro della misura indicata, poi si porta il positivo generale al pannello e da ogni interruttore si va alla sua utenza, con il negativo in comune. Conviene etichettare le vie.',
+  altri: 'Si usa anche su camper, gommoni grandi e piccoli mezzi con impianto a 12 V.',
+  manut: 'Ogni stagione: controllare che i morsetti siano serrati e che non ci siano tracce di verderame o di scaldature sui contatti.',
+  sapere: ['La tensione dell\'impianto (12 V o 24 V) deve essere quella del pannello.', 'I modelli stagni con cappucci in gomma sono quelli da pozzetto o zona esposta agli spruzzi.', 'Se non si è pratici, conviene far fare il collegamento a un elettricista nautico.'] }],
+['protezione', /INTERRUTTOR[EI] .*(MAGNETO|AV\b)|MAGNETOIDRAULIC|DISGIUNTOR|SEZIONATOR|CIRCUIT BREAKER/, ['25', '01'], {
+  cosa: 'Protezione di linea: interrompe il circuito quando la corrente supera il valore previsto e si riarma a mano, senza sostituire nulla.',
+  dove: 'Nei quadri e sulle linee degli impianti elettrici di bordo.',
+  quanto: 'Uno per ogni linea da proteggere. L\'amperaggio si sceglie in base alla sezione del cavo e all\'assorbimento dell\'utenza: i valori disponibili sono nelle varianti.',
+  uso: 'Si monta sul positivo della linea, il più vicino possibile alla batteria o al quadro.',
+  altri: 'Sostituisce il portafusibile dove si vuole evitare di tenere fusibili di scorta.',
+  sapere: ['Deve essere adatto al tipo di corrente del circuito (continua o alternata).', 'Valore troppo alto non protegge, troppo basso fa scattare la protezione senza motivo.'] }],
+['staccabatteria', /STACCABATTERI|STACCA ?BATTERI|DEVIATORE BATTERI|SELETTOR[EI] (PER )?BATTERI/, ['25'], {
+  cosa: 'Stacca o seleziona le batterie: isola l\'impianto o sceglie quale banco usare.',
+  dove: 'Sul circuito principale delle batterie, in un punto raggiungibile anche di corsa.',
+  quanto: 'Uno per banco batterie; i modelli 1-2-both servono quando i banchi sono due.',
+  uso: 'Si inserisce sul positivo tra batteria e impianto, con cavi di sezione adeguata e capicorda ben serrati.',
+  altri: 'È anche una sicurezza antincendio e antifurto quando la barca resta ferma.',
+  manut: 'Controllare il serraggio dei bulloni: un contatto lasco scalda e si ossida.',
+  sapere: ['La portata in ampere deve coprire anche lo spunto del motorino di avviamento.', 'Non va aperto con il motore in moto se l\'alternatore passa da lì: si rischia di rovinarlo.'] }],
+['interruttore', /INTERRUTTOR|DEVIATOR|PULSANT|BASCUL/, ['25', '22', '34', '04', '01'], {
+  cosa: 'Interruttore per accendere e spegnere un\'utenza elettrica di bordo.',
+  dove: 'Plancia, pannelli, paratie; i modelli stagni anche in pozzetto.',
+  quanto: 'Uno per utenza, scelto in base alla corrente massima e al tipo di comando (on/off, on-off-on, momentaneo).',
+  uso: 'Si monta e si collega secondo le istruzioni del produttore; i modelli da incasso richiedono il foro della misura indicata.',
+  altri: 'Va bene anche su camper, gommoni e impianti a 12 V in genere.',
+  sapere: ['Nelle zone bagnate servono versioni stagne o con cappuccio in gomma.', 'Le versioni luminose fanno vedere a colpo d\'occhio cosa è rimasto acceso.'] }],
+['fusibile', /FUSIBIL|PORTAFUSIBIL/, ['25'], {
+  cosa: 'Protegge il circuito: se la corrente supera il valore previsto il fusibile si interrompe e salva cavi e apparecchi.',
+  dove: 'In tutti gli impianti elettrici di bordo, nei quadri o sulle singole linee.',
+  quanto: 'Uno per linea, più qualcuno di scorta per ogni valore usato a bordo.',
+  uso: 'Si monta sul positivo, il più vicino possibile alla fonte di alimentazione.',
+  altri: 'Gli stessi fusibili si usano su camper, auto, rimorchi e gommoni.',
+  sapere: ['Si sostituisce sempre con uno dello stesso amperaggio.', 'Se salta di continuo il problema è nell\'impianto, non nel fusibile.'] }],
+['batteria', /^BATTERI[AE]\b/, ['25'], {
+  cosa: 'Batteria di bordo: avviamento del motore e/o alimentazione dei servizi.',
+  dove: 'In un vano ventilato e ben fissata, vicino al motore per l\'avviamento.',
+  quanto: 'Per i servizi la capacità in Ah si stima dai consumi giornalieri, tenendo conto che le batterie al piombo durano di più se non vengono scaricate a fondo; per l\'avviamento conta la corrente di spunto.',
+  uso: 'Si fissa con staffa o cinghia, si collega prima il positivo poi il negativo e si proteggono i morsetti con grasso apposito o cappucci.',
+  altri: 'Le batterie servizi alimentano frigo, inverter e strumenti a motore spento.',
+  manut: 'Tenerla carica durante la sosta invernale: una batteria lasciata scarica si rovina. Sulle versioni ispezionabili controllare il livello dell\'elettrolito.',
+  sapere: ['Avviamento e servizi sono due usi diversi: le batterie non sono intercambiabili.', 'Il caricabatterie deve essere adatto alla tecnologia (piombo, AGM, gel, litio).'] }],
+['caricabatterie', /CARICABATTERI|CARICA ?BATTERI/, ['25'], {
+  cosa: 'Ricarica le batterie quando la barca è collegata alla corrente di banchina o a un generatore.',
+  dove: 'Vicino alle batterie, in zona asciutta e ventilata.',
+  quanto: 'La corrente di carica va proporzionata alla capacità totale del banco: con un banco grande e un caricabatterie piccolo la ricarica è molto lenta.',
+  uso: 'Si fissa a paratia, si collega alla 220 V di banchina e si portano le uscite ai banchi batterie con le loro protezioni.',
+  altri: 'I modelli a più uscite caricano insieme batteria motore e batteria servizi.',
+  sapere: ['Va impostato sulla tecnologia della batteria.', 'Per il litio serve un modello compatibile: non tutti lo sono.'] }],
+['inverter', /INVERTER|GENERATOR/, ['25'], {
+  cosa: 'Trasforma la corrente continua delle batterie in corrente alternata a 220 V, per usare a bordo apparecchi da casa.',
+  dove: 'Vicino alle batterie, in zona asciutta e ventilata.',
+  quanto: 'Si somma la potenza degli apparecchi che possono restare accesi insieme e si prende un modello con margine, perché motori e compressori allo spunto assorbono molto di più del dichiarato.',
+  uso: 'Si collega alle batterie con cavi di sezione adeguata e protezione sul positivo, il più vicino possibile alle batterie.',
+  altri: 'Si usa anche in camper.',
+  sapere: ['Per apparecchi elettronici conviene l\'onda sinusoidale pura.'] }],
+['solare-acc', /(CABLAGG|SHUNT|REGOLATOR|TEST|CONNETTOR|STAFF|SUPPORT|MODULO BLUETOOTH).*SOLAR|REGOLATOR[EI] DI CARICA/, ['25'], {
+  cosa: 'Accessorio dell\'impianto solare: serve a collegare, regolare o controllare i pannelli.',
+  dove: 'Tra pannello, regolatore e batterie.',
+  quanto: 'Il regolatore si sceglie in base alla potenza complessiva dei pannelli e alla tensione del banco; i regolatori MPPT in genere sfruttano meglio il pannello di quelli PWM.',
+  uso: 'L\'ordine di collegamento è quello delle istruzioni del regolatore: di norma prima la batteria, poi il pannello.',
+  altri: 'Gli stessi componenti si usano su camper e casette.',
+  sapere: ['Senza regolatore il pannello rovina le batterie.'] }],
+['solare', /PANNELL[OI] SOLAR|PANNELLI SOLARI|MODUL[OI] SOLAR/, ['25'], {
+  cosa: 'Pannello solare: produce energia elettrica dalla luce del sole per ricaricare le batterie.',
+  dove: 'In coperta, su tientibene, roll-bar, tendalino o tuga; i flessibili si incollano anche su superfici curve.',
+  quanto: 'Si parte dal consumo giornaliero di bordo. La produzione reale dipende da sole, orientamento e ombre. Potenza e misure sono nelle varianti.',
+  uso: 'Si fissa o si incolla, si porta il cavo al regolatore e dal regolatore alle batterie, con protezione sul positivo.',
+  altri: 'Stessi pannelli per camper, casette e gommoni.',
+  manut: 'Vanno tenuti puliti dal salino, che riduce la resa.',
+  sapere: ['Le ombre di albero, boma e antenne tagliano molto la produzione, anche se piccole.', 'La potenza dichiarata è in condizioni di laboratorio: in uso reale si ottiene meno.'] }],
+['fanale', /FANAL|LUCI? DI NAVIGAZIONE|LUCE DI FONDA|TRICOLOR|LUCI DI VIA|LUCI 360/, ['25', '07'], {
+  cosa: 'Fanale di navigazione: rende la barca visibile e ne indica posizione e direzione di notte o con scarsa visibilità.',
+  dove: 'All\'esterno, nelle posizioni previste dal regolamento: prua, lati, poppa, albero.',
+  quanto: 'La combinazione dipende da lunghezza e tipo di barca; servono i settori di luce richiesti e la portata minima prevista per quella lunghezza.',
+  uso: 'Si fissa in coperta o su candeliere e si collega al quadro con la sua linea protetta, curando la tenuta del passaggio cavi.',
+  altri: 'La luce di fonda si accende all\'ancora, non in navigazione.',
+  manut: 'Controllare prima di ogni uscita serale e tenere a bordo lampadine di scorta.',
+  sapere: ['Devono essere omologati e nella posizione giusta: è materia di regolamento.', 'Il tricolore in testa d\'albero si usa a vela, non a motore.'] }],
+['luce', /FARETT|PLAFONIER|LAMPADA|LUCE|LUCI\b|STRISCE? LED|LED\b|PROIETTOR|TORCIA/, ['25', '16', '07', '04'], {
+  cosa: 'Luce o lampada per illuminare a bordo o per lavorare.',
+  dove: 'Interni, coperta o esterno, a seconda del modello.',
+  uso: 'Le luci fisse si montano e si collegano alla linea luci del quadro; quelle portatili si ricaricano o vanno a batterie.',
+  altri: 'Le strisce LED servono anche per luci di cortesia sotto i gradini, nei gavoni e sotto i mobili.',
+  sapere: ['Per l\'esterno serve un grado di protezione adatto a pioggia e spruzzi.', 'La luce rossa in plancia aiuta a conservare la visione notturna.'] }],
+['lampadina', /LAMPADIN/, ['25', '04'], {
+  cosa: 'Lampadina di ricambio per luci e fanali di bordo.',
+  dove: 'Negli impianti elettrici navali.',
+  quanto: 'Almeno una di scorta per ogni tipo presente a bordo.',
+  uso: 'Si sostituisce a impianto spento; le alogene senza toccare il vetro a mani nude.',
+  altri: 'Le versioni LED di pari attacco riducono molto il consumo.',
+  sapere: ['Attacco, tensione e potenza devono essere quelli del portalampada.', 'Nei fanali di navigazione va usata solo la lampadina compatibile con l\'omologazione del fanale.'] }],
+['collegamenti', /CAPICORD|FASTON|TERMINAL[EI] ELETTR|MORSETT|MAMMUT|GIUNZION|PASSACAVI ELETTR/, ['25'], {
+  cosa: 'Serve a collegare in modo sicuro i cavi elettrici tra loro o alle apparecchiature.',
+  dove: 'In tutti gli impianti elettrici di bordo.',
+  quanto: 'La misura segue la sezione del cavo e il diametro del perno; per la manutenzione conviene un assortimento.',
+  uso: 'Si crimpa con la pinza adatta (non con la pinza universale) e si protegge con guaina termorestringente.',
+  altri: 'Stessi terminali per camper, gommoni e rimorchi.',
+  sapere: ['In ambiente marino sono preferibili i terminali stagnati.', 'Un collegamento crimpato male è una causa frequente di guasti elettrici a bordo.'] }],
+['cavo-elettrico', /CAVO ELETTR|CAVI ELETTR|CAVO .*(UNIPOLAR|BIPOLAR|TRIPOLAR)|CAVO BATTERI|CAVO .*BANCHINA/, ['25'], {
+  cosa: 'Cavo per l\'impianto elettrico di bordo o per l\'allacciamento in banchina.',
+  dove: 'Collegamenti delle utenze, delle batterie e della presa di banchina.',
+  quanto: 'Si misura il percorso reale (andata e ritorno) e si sceglie la sezione in base alla corrente e alla lunghezza: su tratte lunghe serve una sezione maggiore, altrimenti la tensione cala e l\'utenza rende meno.',
+  uso: 'Si fa passare evitando spigoli vivi, si fissa con fascette e si termina con capicorda crimpati.',
+  altri: 'Il cavo da banchina serve anche per alimentare utensili durante i lavori.',
+  sapere: ['Per uso nautico sono preferibili conduttori stagnati.', 'Ogni linea va protetta con fusibile o interruttore alla partenza.'] }],
+['presa', /PRES[AE]\b(?! A MARE)|SPIN[AE]\b|PROLUNG|USB/, ['25'], {
+  cosa: 'Presa, spina o prolunga per collegare apparecchi o la barca alla corrente.',
+  dove: 'In cabina, in plancia o in coperta per l\'allacciamento di banchina.',
+  quanto: 'Si sceglie su tensione e amperaggio del collegamento; in coperta serve la versione stagna con tappo.',
+  uso: 'Si incassa nel foro indicato e si collega rispettando fase, neutro e terra dove previsto.',
+  altri: 'Le prese USB sono comode in cuccetta e in plancia.',
+  sapere: ['All\'esterno solo prese stagne, con il coperchio chiuso quando non si usano.'] }],
+['tromba', /TROMBA|AVVISATOR|CLACSON|FISCHIETT|CAMPANA/, ['07', '25'], {
+  cosa: 'Avvisatore acustico: segnala presenza e manovre della barca.',
+  dove: 'In navigazione e in manovra, come previsto dal regolamento per prevenire gli abbordi.',
+  quanto: 'Uno per barca; la potenza sonora richiesta cresce con la lunghezza dello scafo.',
+  uso: 'La tromba elettrica si fissa in coperta o sotto la tuga, con pulsante in plancia; quella a gas si tiene pronta nel gavone.',
+  altri: 'Il fischietto fa parte della dotazione individuale del giubbotto.',
+  sapere: ['Rientra tra le dotazioni di sicurezza: conviene verificare cosa serve per quella navigazione.'] }],
+['ancora', /^(KIT )?ANCOR[AE]\b/, ['01'], {
+  cosa: 'Ancora: tiene ferma la barca sul fondo quando si è alla fonda.',
+  dove: 'A prua, collegata a catena e/o cima, manovrata a mano o con il salpa-ancora.',
+  quanto: 'Il peso si sceglie su lunghezza e dislocamento della barca, salendo di una misura dove si ancora con vento. Molti tengono a bordo anche una seconda ancora di rispetto, di tipo diverso.',
+  uso: 'Si fila con la barca in abbrivio indietro, dando calumo molto più lungo della profondità, poi si tira indietro piano per farla spedare.',
+  altri: 'Le ancore piccole servono per tender, gommoni e per ancorarsi di poppa.',
+  manut: 'Sciacquare con acqua dolce; controllare perno, grillo e legatura del terminale.',
+  sapere: ['Il tipo di ancora rende in modo diverso su sabbia, fango, roccia o alghe.', 'Il peso da solo non basta: contano calumo, tipo di fondale e come viene spedata.'] }],
+['catena', /^CATEN[AE]\b/, ['01'], {
+  cosa: 'Catena per l\'ancora o per l\'ormeggio.',
+  dove: 'Tra ancora e barca, nel gavone di prua.',
+  quanto: 'Serve una lunghezza che permetta di filare parecchie volte la profondità dove si ancora di solito: la catena va presa abbondante rispetto ai fondali che si frequentano.',
+  uso: 'Deve corrispondere al barbotin del salpa-ancora, altrimenti salta. Conviene segnare i metri con fascette colorate o vernice.',
+  altri: 'Spezzoni di catena si usano come zavorra o come prolunga sui corpi morti.',
+  manut: 'Sciacquare con acqua dolce; ogni stagione controllare usura e ruggine e, se serve, invertire capo e fondo.',
+  sapere: ['Misura e passo devono essere compatibili con il barbotin del verricello.', 'La zincatura si consuma: una catena molto arrugginita va sostituita.'] }],
+['verricello', /VERRICELL|SALPA ?ANCOR|SALPANCOR|MUSONE/, ['01'], {
+  cosa: 'Verricello salpa-ancora: recupera e fila ancora e catena senza fatica.',
+  dove: 'A prua, in coperta o nel gavone dell\'ancora.',
+  quanto: 'Si sceglie su dimensioni e peso della barca, con un margine abbondante rispetto al peso di ancora più catena filata.',
+  uso: 'Si fissa su un rinforzo di coperta, si alimenta con cavi di grande sezione e protezione dedicata e si comanda con pulsante o telecomando.',
+  altri: 'Sui modelli con campana, la campana serve anche per recuperare cime d\'ormeggio.',
+  manut: 'Sciacquare dopo l\'uso, ingrassare dove previsto e controllare i contatti del teleruttore.',
+  sapere: ['Assorbe moltissima corrente: va alimentato direttamente dalle batterie.', 'Non è un punto di tenuta: in fonda si lavora sulla bitta o sul fermacatena.'] }],
+['parabordo', /PARABORD|COPRIPARABORD/, ['01'], {
+  cosa: 'Parabordo: protegge lo scafo dagli urti contro la banchina o altre barche.',
+  dove: 'In ormeggio e in manovra, legati a candelieri, draglie o tientibene.',
+  quanto: 'La misura cresce con la lunghezza della barca: la tabella del produttore indica quella adatta. Conviene averne per tutti e due i lati, più qualcuno di rispetto.',
+  uso: 'Si legano all\'altezza del punto di contatto con la banchina; quelli a cima passante si regolano meglio in altezza.',
+  altri: 'Servono anche come difese del tender.',
+  manut: 'Si lavano con detergente adatto.',
+  sapere: ['I copriparabordo evitano i segni sullo scafo e proteggono il parabordo.'] }],
+['bitta', /BITT[AE]|GALLOCC|PASSACAV(?!I ELETTR)|GOLFAR|PASSASCOTT/, ['01', '42'], {
+  cosa: 'Punto di attacco o di passaggio per cime d\'ormeggio e di manovra.',
+  dove: 'In coperta, a prua, a poppa e lungo le murate.',
+  uso: 'Si fissa su zona robusta con contropiastra sotto coperta e viteria inox, sigillando il passaggio delle viti.',
+  altri: 'I golfari servono anche come punti di sollevamento e per legare tendalini e cime di sicurezza.',
+  sapere: ['Conta più il fissaggio del pezzo: senza contropiastra la coperta si rovina.'] }],
+['sagola', /SAGOL/, ['07', '01', '36'], {
+  cosa: 'Sagola: cima sottile di servizio. Le sagole galleggianti regolamentari sono quelle del salvagente anulare, che devono restare a galla e non finire sotto l\'elica.',
+  dove: 'Collegata al salvagente anulare, alle boette e ai gavitelli; a bordo come cima di servizio.',
+  quanto: 'Per il salvagente anulare serve la lunghezza prevista dalla dotazione, già pronta e fissata; per gli altri usi si vende a metro.',
+  uso: 'Si lega al salvagente con una gassa e si stiva in modo che fili libera quando si lancia.',
+  altri: 'Per issare segnali e bandiere, legature di servizio, cime di recupero, ritenute leggere e rimorchio del tender.',
+  sapere: ['Il carico di rottura indicato è a sagola nuova e senza nodi.', 'La versione galleggiante si usa dove la cima non deve andare sott\'acqua.'] }],
+['cima', /CIM[AE]|TRECCI|CORD[AE]|SCOTT|DYNEEMA|SAGOL|GHERLIN|DRIZZ/, ['01', '36', '42', '07'], {
+  cosa: 'Cima per ormeggio, ancoraggio o manovra, secondo materiale e tipo di treccia.',
+  dove: 'In coperta: ormeggi, cime di rispetto, scotte e drizze.',
+  quanto: 'Il diametro cresce con la lunghezza della barca. Per gli ormeggi in genere si usano due cime di punta e due spring, più qualcuna di rispetto.',
+  uso: 'Si fa una gassa o un\'impiombatura all\'estremità; il capo tagliato si brucia o si fascia per non sfilacciarlo.',
+  altri: 'Tendalini, parabordi, ritenute, sagole per bandiere e segnali, rimorchio del tender. Le sagole galleggianti si usano dove la cima non deve finire sotto l\'elica: salvagente anulare, cime di recupero, boe e gavitelli.',
+  manut: 'Sciacquare con acqua dolce; controllare i punti di sfregamento, dove la cima si consuma per prima, e invertirla capo per capo quando è usurata da un lato.',
+  sapere: ['Il polipropilene galleggia ed è più economico ma soffre il sole; il poliestere è più resistente all\'usura e ai raggi UV; il dyneema ha carico molto alto a parità di diametro ed è per manovre e drizze.', 'Il carico di rottura indicato è a cima nuova e senza nodi: un nodo riduce molto la resistenza.'] }],
+['ammortizzatore', /AMMORTIZZATOR|MOLL[AE] .*ORMEGG|SNUBBER|COMPENSATOR|MOLLE PER ORMEGG|MOLLE SILENZIATE/, ['01'], {
+  cosa: 'Assorbe gli strattoni sulle cime d\'ormeggio, proteggendo barca, bitte e cime.',
+  dove: 'In ormeggio, inserito sulla cima o sulla catena.',
+  quanto: 'Uno per cima principale; la misura dipende dal diametro della cima e dal peso della barca.',
+  uso: 'Si inserisce sulla cima in tensione lasciando un tratto di cima lasca di sicurezza, che lavora se l\'ammortizzatore cede.',
+  altri: 'Utile anche sul corpo morto e per il tender lasciato in rada.',
+  sapere: ['Riduce strappi e rumore con onda, risacca e onde dei motoscafi.'] }],
+['grillo', /GRILL|MOSCHETTON|REDANC|MAGLI[AE] RAPID|GANCIO DA ORMEGG|GHOOK/, ['01', '36', '42'], {
+  cosa: 'Accessorio di collegamento per catene, cime e attrezzatura.',
+  dove: 'Ormeggio, ancoraggio e attrezzatura di coperta.',
+  quanto: 'La misura segue il diametro della catena o della cima; conviene tenerne di scorta nelle misure di bordo.',
+  uso: 'Si avvita a fondo e si blocca il perno con filo inox o fascetta se resta montato a lungo.',
+  altri: 'Si usano per tendalini, bozzelli, scalette, gavitelli e legature provvisorie.',
+  sapere: ['Il carico di lavoro indicato non va superato: il carico di rottura è un\'altra cosa.', 'Meglio non accoppiare metalli diversi a contatto costante con l\'acqua di mare.'] }],
+['coperta', /BOZZELL|PULEGG|RINVI|STROZZ|STOPPER|ROTAIA|CARRELL|CURSOR|LANDA|PASTECC|ARRICAVO|WINCH|SPINLOCK/, ['42', '36'], {
+  cosa: 'Attrezzatura di coperta per guidare, rinviare o bloccare scotte e drizze.',
+  dove: 'In coperta, sull\'albero e sul boma delle barche a vela.',
+  quanto: 'Si sceglie sul diametro della cima che ci passa e sul carico della manovra.',
+  uso: 'Si fissa con viteria inox su rinforzo, verificando che il rinvio sia allineato con la direzione del tiro.',
+  altri: 'Bozzelli e stopper servono anche per paranchi di servizio e per issare pesi a bordo.',
+  manut: 'Sciacquare con acqua dolce e lubrificare con il prodotto indicato dal costruttore.',
+  sapere: ['Un rinvio disallineato consuma la cima e aumenta lo sforzo.'] }],
+['bussola', /BUSSOL[AE]\b/, ['04'], {
+  cosa: 'Bussola: indica la rotta della barca anche senza elettricità.',
+  dove: 'In plancia o vicino alla timoneria, lontano da masse metalliche, altoparlanti e cavi.',
+  quanto: 'Una principale, più eventualmente una da rilevamento portatile.',
+  uso: 'Si monta allineata all\'asse longitudinale della barca e poi si compensa.',
+  altri: 'La bussola da rilevamento serve per prendere punti a terra e controllare le rotte di collisione.',
+  sapere: ['Telefoni, casse e oggetti magnetici vicini la falsano.', 'La compensazione dopo l\'installazione è necessaria, non opzionale.'] }],
+['vhf', /VHF|RADIO|ANTENN|PMR|AIS|EPIRB/, ['04'], {
+  cosa: 'Radio VHF o sua antenna, per le comunicazioni e la sicurezza in mare.',
+  dove: 'In plancia o portatile, con la relativa antenna.',
+  quanto: 'L\'antenna si sceglie in base al tipo di barca e al punto di installazione.',
+  uso: 'L\'antenna va montata più in alto possibile, con cavo adatto e senza giunzioni inutili; il VHF si alimenta con la sua protezione.',
+  altri: 'Il portatile serve anche sul tender e come riserva in caso di black-out.',
+  sapere: ['La portata dipende soprattutto dall\'altezza dell\'antenna.'] }],
+['elettronica', /ECOSCANDAGL|TRASDUTTOR|SONDA|CHARTPLOTTER|PLOTTER|GPS|GARMIN|RAYMARINE|CARTOGRAF|PORTOLAN|CARTE NAUTICHE/, ['04'], {
+  cosa: 'Strumentazione elettronica o documentazione per la navigazione.',
+  dove: 'In plancia, con sensori e trasduttori collegati sullo scafo.',
+  uso: 'Si installa seguendo il manuale del produttore, con la sua protezione sulla linea di alimentazione.',
+  altri: 'Molti plotter si collegano anche ad AIS, pilota automatico e strumenti del vento.',
+  sapere: ['Prima dell\'acquisto conviene verificare la compatibilità con quello che c\'è già a bordo.', 'La cartografia va aggiornata ed è una spesa a parte.'] }],
+['strumento', /STRUMENT|INDICATOR|CONTAGIR|CONTAMIGL|VDO|SENSOR|VOLTMETR|QUADRANT/, ['04', '31'], {
+  cosa: 'Strumento o sensore per controllare motore e impianti.',
+  dove: 'Sul cruscotto o sul motore.',
+  quanto: 'Uno per grandezza da controllare: giri, temperatura, livello, tensione.',
+  uso: 'Si incassa nel foro della misura indicata e si collega al sensore corrispondente.',
+  altri: 'Gli stessi indicatori si usano su generatori e impianti di bordo.',
+  sapere: ['Strumento e sensore devono essere della stessa famiglia, altrimenti la lettura è falsa.'] }],
+['zattera', /ZATTER/, ['07'], {
+  cosa: 'Zattera di salvataggio autogonfiabile: permette di abbandonare la barca e restare a galla al riparo in attesa dei soccorsi.',
+  dove: 'In coperta nella culla o nel gavone dedicato, in un punto raggiungibile e libero.',
+  quanto: 'Capacità almeno pari al numero di persone a bordo; il tipo (costiera o d\'altura, con dotazione ridotta o completa) dipende dalla distanza dalla costa.',
+  uso: 'Sagola di attivazione legata a un punto solido, zattera in mare sottovento, poi si tira la sagola per gonfiarla; si taglia solo quando si è saliti.',
+  altri: 'Il contenitore rigido è indicato per la coperta esposta, la sacca per il gavone.',
+  manut: 'Va revisionata in un centro autorizzato all\'intervallo indicato dal produttore e dalla normativa. La data della prossima revisione è sull\'etichetta.',
+  sapere: ['La revisione periodica è un costo ricorrente da mettere in conto.', 'La zattera va stivata in modo che possa essere liberata e messa in mare in pochi secondi.'] }],
+['salvataggio', /GIUBBOTT|SALVAGENT|ANULARE|CINTURE? DI SALVAT|AUTOGONFIABIL|RIARMO|MANOVERBOARD|DAN BUOY|VEST\b/, ['07', '43'], {
+  cosa: 'Dotazione di salvataggio: tiene a galla la persona in caso di caduta in mare.',
+  dove: 'A bordo, in posizione raggiungibile; gli anulari in pozzetto o a poppa, pronti da lanciare.',
+  quanto: 'La taglia del giubbotto si sceglie sul peso; i bambini hanno modelli dedicati. Quanti ne servono dipende dalla dotazione prevista per quella navigazione.',
+  uso: 'Si indossa e si regola prima di uscire, con cinghia sottogamba dove presente. Gli autogonfiabili automatici si attivano da soli in acqua; tutti si attivano anche tirando la maniglia.',
+  altri: 'Esistono versioni per bambini, per cani e per gli sport acquatici.',
+  manut: 'Gli autogonfiabili vanno controllati periodicamente (bomboletta avvitata e integra, elemento di attivazione non scaduto) e riarmati dopo ogni attivazione, con il kit del modello.',
+  sapere: ['Le dotazioni obbligatorie dipendono dalla distanza dalla costa a cui si naviga.', 'Un giubbotto autogonfiabile senza bomboletta carica non si gonfia.'] }],
+['estintore', /ESTINTOR/, ['07'], {
+  cosa: 'Estintore: spegne un principio d\'incendio a bordo.',
+  dove: 'Vicino al vano motore, alla cucina e all\'uscita della zona notte, in posizione visibile.',
+  quanto: 'Numero e tipo dipendono dalla barca e dalla normativa per quella navigazione.',
+  uso: 'Si fissa nel suo supporto, raggiungibile senza spostare nulla; si usa alla base della fiamma, a brevi getti.',
+  altri: 'I modelli automatici si montano nel vano motore e intervengono da soli.',
+  manut: 'Controllo periodico e revisione secondo quanto previsto dalla normativa e dal costruttore; il manometro va guardato di tanto in tanto.',
+  sapere: ['La data dell\'ultimo controllo è sul cartellino.'] }],
+['fuochi', /FUOCH|RAZZ|FUMOGEN|FIACCOL|SEGNALI DI SOCCORSO|CARTUCCE? DI SEGNAL/, ['07'], {
+  cosa: 'Segnale di soccorso pirotecnico: razzi a paracadute, fuochi a mano e boette fumogene servono a farsi vedere in emergenza.',
+  dove: 'Nelle dotazioni di sicurezza, in contenitore stagno e raggiungibile.',
+  quanto: 'Il numero dipende dalla distanza dalla costa prevista per quella navigazione: più ci si allontana, più segnali sono richiesti.',
+  uso: 'Solo in emergenza: razzo verticale e sottovento, fuoco a mano fuori bordo e lontano dal corpo, boetta fumogena in acqua sottovento. Le istruzioni sull\'involucro si leggono prima, non al momento.',
+  altri: 'I segnali scaduti non vanno usati per prove o per feste e non si buttano nei rifiuti: vanno conferiti secondo le indicazioni locali.',
+  manut: 'Hanno una data di scadenza stampata sulla confezione: alla scadenza non sono più validi come dotazione e vanno sostituiti.',
+  sapere: ['Conviene controllare la data di scadenza al momento dell\'acquisto e segnarsela.', 'Si conservano all\'asciutto, in contenitore stagno.'] }],
+['segnali-diurni', /SEGNALE|SEGNALI|SEGNALETIC|CONO|PALLONE|TRIANGOL|DIURN|BOETTA|CYALUME|SPECCHIO/, ['07'], {
+  cosa: 'Segnale regolamentare o di avvistamento: serve a dichiarare agli altri la condizione della barca o a farsi vedere.',
+  dove: 'Issato nel sartiame o in un punto ben visibile; le luci chimiche e lo specchio nelle dotazioni.',
+  quanto: 'Uno per situazione: il cono nero rovesciato quando si naviga a vela con il motore acceso, il pallone nero quando si è alla fonda, il bicono per altre condizioni previste.',
+  uso: 'Si issa con una sagola dove sia ben visibile da tutti i lati e si ammaina quando la condizione cessa.',
+  altri: 'Le luci chimiche servono anche come illuminazione d\'emergenza o per marcare un punto di notte.',
+  sapere: ['Per quale segnale esporre in ogni condizione vale il regolamento per prevenire gli abbordi in mare.'] }],
+['riflettente', /RIFLETTENT|SOLAS|CATARIFRANG/, ['07', '10'], {
+  cosa: 'Nastro o materiale riflettente: rimanda la luce di una torcia o di un faro e rende visibile una persona o un oggetto al buio.',
+  dove: 'Giubbotti, salvagenti anulari, zattere, boette, tender e punti di coperta che si vogliono vedere di notte.',
+  quanto: 'Si vende al metro: si misurano i tratti da applicare su ogni oggetto.',
+  uso: 'Si applica su superficie pulita, sgrassata e asciutta, premendo bene su tutta la lunghezza.',
+  altri: 'Si usa anche su remi, pagaie, passerelle, gradini, maniglie e per marcare l\'attrezzatura che può cadere in acqua.',
+  sapere: ['Il nastro omologato SOLAS è quello richiesto sulle dotazioni di salvataggio.', 'La tenuta dipende quasi tutta dalla pulizia della superficie prima di incollarlo.'] }],
+['bandiera', /BANDIER|GONFALON|GUIDON|PENNONCIN|\bASTA\b|\bASTE\b/, ['07'], {
+  cosa: 'Bandiera o asta portabandiera: nazionale, di cortesia, di segnalazione o decorativa.',
+  dove: 'Asta di poppa, crocette o pennoncino.',
+  quanto: 'La misura va in proporzione alla lunghezza della barca; serve una bandiera di cortesia per ogni paese che si visita.',
+  uso: 'Si inferisce con sagola e si ammaina quando la barca resta ferma a lungo, per non consumarla.',
+  altri: 'Le bandiere del codice internazionale servono per segnalazioni e regate.',
+  sapere: ['Sole e vento le consumano: è un ricambio frequente.'] }],
+['antivegetativa', /ANTIVEGETATIV|HARD RACING|MILLE NCT/, ['10'], {
+  cosa: 'Pittura antivegetativa: impedisce ad alghe e organismi marini di attaccarsi alla carena.',
+  dove: 'Sull\'opera viva, cioè la parte di scafo sotto la linea di galleggiamento.',
+  quanto: 'Metri quadri di carena diviso la resa indicata dal produttore, per il numero di mani indicato; spigoli, timone e linea di galleggiamento assorbono di più, quindi meglio un barattolo in più che restare a metà lavoro.',
+  uso: 'Lavaggio, carteggiatura e primer dove previsto, poi le mani indicate dal produttore, rispettando l\'intervallo fra una mano e l\'altra. Sull\'ultima mano contano sia il tempo minimo sia quello massimo prima del varo.',
+  altri: 'Per eliche e piedi poppieri si usano prodotti specifici, non la stessa antivegetativa dello scafo.',
+  manut: 'In genere si rifà a ogni stagione; una carena sporca fa perdere velocità e consumare di più.',
+  sapere: ['Tempi di essiccazione, sovraverniciatura e varo, e la compatibilità con l\'antivegetativa già presente, sono quelli della scheda tecnica del prodotto.', 'Si lavora con guanti, mascherina e buona ventilazione: le polveri di carteggiatura sono nocive.'] }],
+['vernice', /SMALT|VERNIC|PITTUR|PRIMER|FONDO|IMPREGNANT|AWLGRIP|AWLCRAFT|UNIGLOSS|DUREPOX|FLATTENING|BOERO|STOPPANI|VENEZIANI|HEMPEL|EPIFANES/, ['10', '31'], {
+  cosa: 'Prodotto verniciante per proteggere e rifinire scafo, coperta, legni o parti metalliche.',
+  dove: 'Nella manutenzione dello scafo, sopra o sotto il galleggiamento a seconda del prodotto.',
+  quanto: 'Metri quadri da verniciare diviso la resa indicata dal produttore, per il numero di mani (di solito almeno due), più un margine per quello che resta in rullo e barattolo. Dove il catalogo riporta la resa la trovi qui sotto, in «Questo codice».',
+  uso: 'Carteggiare e sgrassare, fondo dove previsto, poi le mani di finitura rispettando l\'intervallo di sovraverniciatura. I bicomponenti si miscelano nel rapporto indicato e si usano entro il tempo di lavorabilità, con il diluente della casa.',
+  manut: 'Le parti verniciate esposte al sole vanno ritoccate prima che la vernice si scrosti: il ritocco costa molto meno del rifacimento.',
+  sapere: ['Numero di mani, spessore, tempi di essiccazione e sovraverniciatura, diluente e percentuale di diluizione sono quelli della scheda tecnica del produttore: sono i dati da seguire, mai quelli a memoria.', 'Temperatura e umidità contano: con il fresco e l\'umido i tempi si allungano molto e la finitura può opacizzarsi.', 'Un bicomponente miscelato non si recupera: meglio prepararne poco per volta.'] }],
+['sigillante', /SIGILLANT|SIKAFLEX|SIKA|ADESIV|COLLA|MASTIC|SOUDAL|PLEXUS|SILICON|SCHIUMA/, ['10', '31', '16'], {
+  cosa: 'Sigillante o adesivo: incolla e rende stagne le giunzioni.',
+  dove: 'Passascafi, oblò, coperta, ferramenta, comenti del teak.',
+  quanto: 'Quanti metri fa una cartuccia dipende dalla sezione del cordolo: più è grosso, meno metri.',
+  uso: 'Si puliscono e si sgrassano le superfici, si usa il primer dove il prodotto lo richiede, si stende il cordolo continuo e si preme il pezzo; l\'eccesso si toglie subito, prima che faccia pelle.',
+  altri: 'Alcune versioni incollano in modo strutturale e riducono o sostituiscono le viti.',
+  sapere: ['Esistono versioni per incollaggio strutturale e versioni smontabili: la scelta dipende dal lavoro.', 'Il silicone comune non è adatto a tutti gli usi nautici e rende difficile verniciare dopo.', 'Tempi di pelle e di indurimento sono nella scheda tecnica del prodotto.'] }],
+['resina', /RESIN|EPOSSID|STUCC|GELCOAT|WEST SYSTEM|VETRORESIN|\bMAT\b|TESSUT|ADDENSANT/, ['10'], {
+  cosa: 'Prodotto per riparare, stuccare o laminare scafo e coperta.',
+  dove: 'Nella manutenzione e riparazione dello scafo.',
+  quanto: 'Dipende dalla superficie e dagli strati: per riparazioni piccole bastano confezioni ridotte, per una laminazione si calcolano resina e tessuto insieme.',
+  uso: 'Si miscela esattamente nel rapporto indicato, si lavora entro il tempo utile (che si accorcia con il caldo) e si carteggia dopo l\'indurimento.',
+  altri: 'Gli stessi prodotti servono per incollaggi strutturali e per chiudere fori non più usati.',
+  sapere: ['Rapporto di miscelazione e tempi sono quelli della scheda tecnica: sbagliarli significa non far indurire il prodotto.', 'Servono guanti e ventilazione.'] }],
+['lucidatura', /POLISH|LUCIDANT|CERA|PASTA ABRASIV|FLITZ|COLLINITE|RESTORER|GUMEMP/, ['10', '13'], {
+  cosa: 'Prodotto per lucidare e proteggere, ridando brillantezza a gelcoat, vernici o metalli.',
+  dove: 'Scafo, coperta, inox e parti cromate.',
+  quanto: 'Una confezione copre di solito più lavorazioni: conta più il tempo di lavoro che la quantità.',
+  uso: 'Si lavora su superficie pulita e asciutta, a sezioni piccole, con tampone o a mano, rifinendo con panno pulito.',
+  manut: 'Dopo la lucidatura conviene una cera di protezione, altrimenti l\'effetto dura poco.',
+  sapere: ['Non si lavora al sole o su superficie calda.'] }],
+['abrasivi', /DISCHI|CARTA ABRASIV|ROTOLI|FOGLI|LAME|RASCHIETT|SPATOL|PENNELL|RULLIN|RULLO|PISTOLA|NASTRO (ADESIVO|CARTA|MASCHER)|SEGACC|SMERIGLIATRIC|MULTIFUNZIONE|TERMOSOFFIATOR/, ['10', '13'], {
+  cosa: 'Attrezzo o materiale di consumo per preparare le superfici e applicare i prodotti.',
+  dove: 'Nei lavori di carteggiatura, stuccatura e verniciatura.',
+  quanto: 'Si sceglie la grana: grossa per togliere, media per spianare, fine per la finitura. Per un lavoro completo in genere servono più grane.',
+  uso: 'Si parte dalla grana più grossa e si scende per gradi, togliendo la polvere tra un passaggio e l\'altro.',
+  altri: 'Gli stessi materiali servono per lavori su legno e metallo fuori dalla barca.',
+  sapere: ['Il risultato di una verniciatura dipende soprattutto dalla preparazione.'] }],
+['detergente', /DETERGENT|SGRASSANT|PULITOR|SMACCHIATOR|SHAMPOO|CLEAN|DISINCROSTANT|ANTIMUFF|ACETO|BARNACLE|MAGIC|FULCRON/, ['13', '10'], {
+  cosa: 'Prodotto per la pulizia e la cura della barca.',
+  dove: 'Scafo, coperta, teak, gommone o interni, secondo il prodotto.',
+  quanto: 'Molti sono concentrati e si diluiscono: una confezione rende parecchi lavaggi.',
+  uso: 'Si usa come indicato in etichetta, dove sono riportati diluizione e tempo di posa.',
+  altri: 'I prodotti specifici per gommone, inox, tessuti o teak non sono intercambiabili.',
+  sapere: ['Conviene provare prima su una zona nascosta.', 'I prodotti acidi vanno usati con guanti e risciacquati molto bene, lontano da parti metalliche lucide.'] }],
+['spazzole', /SPAZZOL|MOCIO|SPUGN|MANIC|SECCHI|IDROPULITRIC|DOODLEBUG|SHURHOLD/, ['13'], {
+  cosa: 'Accessorio per il lavaggio della barca.',
+  dove: 'Coperta, scafo e interni.',
+  quanto: 'In genere una spazzola morbida per il gelcoat, una più dura per il fondo antiscivolo e un manico telescopico se la barca è alta.',
+  uso: 'Si lava dall\'alto verso il basso e si risciacqua con acqua dolce.',
+  altri: 'Il manico telescopico serve anche per gaffa e accessori compatibili dello stesso sistema.',
+  sapere: ['Sulle superfici lucide vanno setole morbide, altrimenti si rigano.'] }],
+['teak', /TEAK/, ['13', '10', '16'], {
+  cosa: 'Prodotto o accessorio per la cura del teak di coperta.',
+  dove: 'Coperte, plance bagno e parti in teak.',
+  quanto: 'Si calcola sui metri quadri di coperta; i detergenti sono spesso concentrati.',
+  uso: 'Si lava nel senso della venatura con spazzola morbida, poi si applica l\'eventuale protettivo su legno pulito e asciutto.',
+  altri: 'Gli stessi prodotti valgono per tavoli e plance in teak.',
+  manut: 'Lavaggi delicati e frequenti consumano molto meno del lavaggio aggressivo una volta l\'anno.',
+  sapere: ['Spazzolare di traverso o troppo forte consuma il legno tenero e lascia la venatura in rilievo.', 'Mani e tempi dei protettivi sono quelli indicati sulla confezione.'] }],
+['autoclave', /AUTOCLAV/, ['22'], {
+  cosa: 'Autoclave: mette in pressione l\'acqua dolce dei serbatoi per farla arrivare a rubinetti e doccia.',
+  dove: 'Nell\'impianto idraulico, vicino ai serbatoi.',
+  quanto: 'La portata si sceglie su quanti rubinetti possono essere aperti insieme; un vaso di espansione riduce gli avvii continui e allunga la vita alla pompa.',
+  uso: 'Si monta su supporti antivibranti, con filtro a monte, raccordi flessibili e alimentazione protetta.',
+  altri: 'La stessa pompa si usa su camper e casette.',
+  manut: 'Pulire il filtro; svuotare l\'impianto prima dell\'inverno per evitare il gelo.',
+  sapere: ['Non deve girare a secco.', 'Se parte e si ferma in continuazione, di solito c\'è aria o una perdita.'] }],
+['sentina', /POMP[AE] .*SENTIN|SENTINA|SUBMERSIBLE|SUBFLO|GALLEGGIANT.*SENTIN/, ['22'], {
+  cosa: 'Pompa di sentina: elimina l\'acqua che si raccoglie nel fondo della barca.',
+  dove: 'Nel punto più basso della sentina, con scarico fuori bordo.',
+  quanto: 'Si sceglie una portata abbondante; spesso le si affianca una pompa manuale di riserva.',
+  uso: 'Si fissa sul fondo con la succhieruola libera, si porta il tubo allo scarico con un\'ansa alta per evitare il ritorno e si collega il galleggiante con alimentazione diretta e protetta, così funziona anche a quadro spento.',
+  altri: 'Le pompe portatili servono anche per svuotare il tender o il gommone.',
+  manut: 'Controllare spesso che la succhieruola sia libera e provare il funzionamento a mano.',
+  sapere: ['La portata dichiarata è teorica: con tubo e dislivello reali rende meno.', 'La pompa di sentina non sostituisce la riparazione di una falla.'] }],
+['pompa', /POMP[AE]|GIRANT|MEMBRAN/, ['22', '16', '31'], {
+  cosa: 'Pompa o suo ricambio per muovere liquidi a bordo: acqua dolce, acqua di mare, scarichi.',
+  dove: 'Nell\'impianto idraulico di bordo o sul motore.',
+  quanto: 'Si sceglie su portata e prevalenza richieste; le giranti conviene tenerle di scorta a bordo.',
+  uso: 'Si monta rispettando il verso del flusso indicato sulla pompa.',
+  altri: 'Le pompe manuali servono come riserva in caso di black-out elettrico.',
+  manut: 'La girante della pompa acqua mare del motore si cambia a intervalli regolari: se si rompe il motore scalda.',
+  sapere: ['Attacchi, tensione e portata devono essere compatibili con l\'impianto esistente.', 'Le pompe a girante non devono girare a secco: la girante si rovina.'] }],
+['wc', /TOILETTE|\bWC\b|MACERATOR|TECMA|SANISPLIT|VACUFLUSH|TAVOLETT|ACQUE NERE|DISGREGANT/, ['16', '22'], {
+  cosa: 'Componente o prodotto per il bagno di bordo.',
+  dove: 'Servizi igienici, collegati a scarichi e serbatoio acque nere.',
+  quanto: 'Uno per bagno; i ricambi comuni (guarnizioni, kit pompa) conviene tenerli a bordo.',
+  uso: 'Si collega all\'ingresso acqua e allo scarico con antisifone dove serve, con alimentazione protetta.',
+  altri: 'I disgreganti riducono gli odori e aiutano lo svuotamento del serbatoio.',
+  manut: 'Guarnizioni e pompa sono materiale di consumo; un trattamento periodico evita incrostazioni di calcare nei tubi.',
+  sapere: ['Lo scarico in mare è regolato: fuori dalle zone consentite si usa il serbatoio.', 'Nel wc di bordo non va buttato nulla che non sia previsto: è una causa frequente di intasamenti.'] }],
+['serbatoio', /SERBATO|BOILER|SCALDABAGN/, ['22', '16', '31'], {
+  cosa: 'Serbatoio o scaldabagno per acqua, carburante o acque reflue.',
+  dove: 'Nell\'impianto di bordo, ben fissato.',
+  quanto: 'La capacità si sceglie sull\'autonomia desiderata e sullo spazio disponibile.',
+  uso: 'Si fissa in modo che non si muova nemmeno pieno, con sfiato e raccordi della misura giusta.',
+  altri: 'Il boiler di solito scalda sia con la 220 V sia con l\'acqua di raffreddamento del motore.',
+  manut: 'Il serbatoio dell\'acqua va sanificato ogni stagione; quello del carburante va tenuto pieno in inverno per ridurre la condensa.',
+  sapere: ['Ogni serbatoio va usato solo per il liquido per cui è previsto.'] }],
+['valvola', /VALVOL|SARACINESC|RUBINETT|MISCELATOR|DOCC|ELETTROVALVOL/, ['22', '19', '16'], {
+  cosa: 'Regola o interrompe il passaggio dell\'acqua.',
+  dove: 'Impianto idraulico di bordo e prese a mare.',
+  quanto: 'Una per ogni passaggio da intercettare; il diametro è quello del tubo o del passascafo.',
+  uso: 'Diametro e tipo di attacco devono corrispondere a quelli dell\'impianto; sui filetti si usa sigillante adatto.',
+  manut: 'Le valvole delle prese a mare vanno manovrate ogni tanto e ingrassate dove previsto, altrimenti si bloccano.',
+  sapere: ['Quando la barca resta ferma le prese a mare andrebbero chiuse.'] }],
+['passascafo', /PASSASCAF|PRES[AE] A MARE|OMBRINAL|SCARICO A MURATA/, ['19', '22'], {
+  cosa: 'Permette all\'acqua di entrare o uscire attraverso lo scafo in modo controllato.',
+  dove: 'Sullo scafo; sotto il galleggiamento sempre accoppiato a una valvola.',
+  quanto: 'Il diametro è quello del tubo collegato; il materiale va scelto compatibile con scafo e valvole.',
+  uso: 'Si monta con sigillante adatto e controdado, e il tubo si blocca con due fascette inox.',
+  altri: 'Gli ombrinali fanno defluire l\'acqua da pozzetto e cassette.',
+  manut: 'Controllo ogni stagione: è un punto critico per la sicurezza dello scafo.',
+  sapere: ['Materiali diversi a contatto accelerano la corrosione.', 'Vicino a ogni presa a mare dovrebbe esserci un tappo conico di emergenza.'] }],
+['raccordo', /RACCORD|PORTAGOMM|GOMIT|NIPLES|RIDUZION|MANICOTT|TEE\b|CURVA|BOCCHETTON/, ['19', '22'], {
+  cosa: 'Raccordo per collegare tubi e componenti dell\'impianto.',
+  dove: 'Impianti idraulici, di scarico e del carburante.',
+  quanto: 'Serve la misura esatta di filetto e diametro: conviene portare il pezzo vecchio o misurarlo.',
+  uso: 'Si avvita con nastro o sigillante per filetti e si bloccano i tubi con fascette.',
+  altri: 'Gli stessi raccordi si usano per irrigazione e camper.',
+  sapere: ['Filetto gas e filetto metrico non si accoppiano.'] }],
+['tubo', /TUB[OI]\b|TUBO/, ['22', '19', '31', '16'], {
+  cosa: 'Tubo per impianti di bordo: acqua, scarichi o carburante, secondo il tipo.',
+  dove: 'A bordo, tra pompe, serbatoi, prese a mare e scarichi.',
+  quanto: 'Si vende a metro: conviene misurare il percorso reale e aggiungere qualcosa per le curve, perché le curve strette strozzano il passaggio.',
+  uso: 'Si taglia netto, si infila sul portagomma e si blocca con fascette, doppie sotto il galleggiamento.',
+  sapere: ['Ogni tubo è previsto per un liquido: carburante, acqua potabile e scarichi non sono intercambiabili.', 'I tubi per acque nere devono essere di tipo antiodore.'] }],
+['fascette', /FASCETT|COLLAR|STRINGITUB/, ['22', '19', '25'], {
+  cosa: 'Stringe e fissa tubi e cavi.',
+  dove: 'Impianti idraulici ed elettrici di bordo.',
+  quanto: 'Si prende la misura che comprende il diametro del tubo; sotto il galleggiamento se ne usano due per attacco.',
+  uso: 'Si stringe con decisione ma senza tagliare il tubo, orientando la vite dove si possa riprendere.',
+  altri: 'Le fascette da cablaggio servono per ordinare i cavi e per mille fissaggi provvisori.',
+  sapere: ['In barca servono fascette inox: quelle comuni arrugginiscono.'] }],
+['filtro', /FILTR|PREFILTR|DECANTATOR/, ['22', '31', '19'], {
+  cosa: 'Filtro: trattiene sporco e impurità del liquido che ci passa.',
+  dove: 'Impianto del carburante, del raffreddamento o dell\'acqua.',
+  quanto: 'Oltre al filtro serve la cartuccia di ricambio: conviene averne almeno una di scorta.',
+  uso: 'Si monta rispettando il verso del flusso, in posizione ispezionabile.',
+  altri: 'Il filtro acqua mare è la prima cosa da guardare quando il motore scalda.',
+  manut: 'La cartuccia del gasolio si cambia agli intervalli del tagliando; quella dell\'acqua mare si pulisce a vista.',
+  sapere: ['La cartuccia deve essere quella del modello: non tutte si somigliano.'] }],
+['anodo', /ANOD|OGIV|PIASTR[AE] .*ZINC|BARROTT|PINNA|PLACCA|COLLARE .*(ASSE|ALBER)/, ['28'], {
+  cosa: 'Anodo sacrificale: si consuma al posto delle parti metalliche immerse e le protegge dalla corrosione galvanica.',
+  dove: 'Asse, elica, piede del motore, flap, timone, scafo, scambiatore e boiler.',
+  quanto: 'Si controllano a ogni alaggio: conviene sostituire la serie completa di quel motore o di quell\'asse.',
+  uso: 'Si monta su superficie metallica pulita e nuda, senza vernice né antivegetativa in mezzo, serrando bene: il contatto elettrico è tutto.',
+  altri: 'Gli anodi interni di scambiatore e boiler si controllano insieme agli altri, anche se non si vedono.',
+  manut: 'Vanno sostituiti prima che siano consumati del tutto, secondo le indicazioni del costruttore del motore.',
+  sapere: ['Zinco per acqua salata, alluminio per acqua salata e salmastra, magnesio solo per acqua dolce.', 'Non vanno mai verniciati.', 'Se si consumano troppo in fretta può esserci una dispersione nell\'impianto: va controllato.'] }],
+['elica-manovra', /ELICHE DI MANOVRA|ELICA DI MANOVRA|THRUSTER|MAX POWER|BOW ?THRUST/, ['31', '34'], {
+  cosa: 'Elica di manovra: spinge lateralmente prua o poppa e rende facili ormeggio e manovra in spazi stretti.',
+  dove: 'In un tunnel passante nello scafo, a prua o a poppa.',
+  quanto: 'Si sceglie sulla lunghezza e sul peso della barca e sulla superficie esposta al vento; spinta e diametro del tunnel sono nelle varianti di questa pagina.',
+  uso: 'Richiede un tunnel laminato nello scafo, quindi un lavoro da cantiere. L\'alimentazione si prende dalle batterie con cavi di grande sezione e protezione dedicata, spesso con una batteria dedicata vicina all\'elica.',
+  manut: 'Anodo e tenute vanno controllati a ogni alaggio; il tunnel va tenuto pulito dalle incrostazioni.',
+  sapere: ['Assorbe moltissima corrente: si usa a impulsi brevi, non in continuo, per non surriscaldare il motore elettrico.', 'Il diametro del tunnel deve corrispondere al modello: va verificato prima dell\'ordine.'] }],
+['elica', /ELIC[AH]|ELICHE|AUTOPROP|TRASMISSION/, ['31'], {
+  cosa: 'Elica: trasforma la potenza del motore in spinta.',
+  dove: 'Sull\'asse o sul piede del motore.',
+  quanto: 'Diametro, passo, numero di pale e senso di rotazione devono corrispondere al motore e alla barca.',
+  uso: 'Si monta secondo le istruzioni del motore o dell\'asse, con i suoi fermi di sicurezza e l\'anodo dove previsto.',
+  altri: 'Le eliche abbattibili o a pale orientabili riducono la resistenza sulle barche a vela.',
+  sapere: ['Un\'elica sbagliata fa consumare di più e non fa raggiungere i giri massimi.', 'Per la scelta esatta servono i dati del motore: meglio non andare a memoria.'] }],
+['lubrificante', /WD-?40|SVITOL|LUBRIFICANT|\bCRC\b|GRASS|VASELINA|SILICONE SPRAY|PASTA DI RAME|MCLUBE|PTFE/, ['31', '10', '13', '42'], {
+  cosa: 'Lubrificante, grasso, sbloccante o protettivo, secondo il prodotto: lubrifica i meccanismi, scioglie la ruggine o protegge dall\'umidità.',
+  dove: 'Cerniere, serrature, snodi, contatti elettrici, attrezzatura di coperta, parti metalliche esposte.',
+  uso: 'Si applica sulla parte pulita, come indicato sulla confezione. Con gli sbloccanti, sui bulloni bloccati conviene lasciare agire qualche minuto prima di forzare.',
+  altri: 'Secondo il prodotto: sbloccare viti e dadi arrugginiti, far scorrere cerniere e serrature, togliere umidità dai contatti (solo con i prodotti dichiarati per elettronica), proteggere gli attrezzi dopo l\'uso, togliere residui di adesivo.',
+  sapere: ['Lo sbloccante non è un grasso: dove serve lubrificazione duratura va usato un grasso o un lubrificante specifico.', 'Sulle superfici verniciate e sulla plastica conviene provare prima, e non va spruzzato vicino a fiamme o su parti calde.', 'Sui contatti elettrici si usano solo i prodotti dichiarati adatti all\'elettronica.'] }],
+['motore', /CANDEL|OLIO|CINGHI|TERMOSTAT|PREMISTOPP|SOFFIETT|KIT TAGLIAND|SPECIFICHE|ANTIVIBRANT|PUNT[EI]/, ['31'], {
+  cosa: 'Ricambio o prodotto per la manutenzione del motore.',
+  dove: 'Motori entrobordo e fuoribordo.',
+  quanto: 'Segue gli intervalli di tagliando del costruttore; i kit tagliando raccolgono i pezzi che si cambiano insieme.',
+  uso: 'Si sostituisce a motore freddo, seguendo il manuale del motore.',
+  altri: 'Gli stessi prodotti servono per i generatori di bordo.',
+  manut: 'A bordo conviene sempre avere girante, cinghia, filtri e olio di scorta.',
+  sapere: ['Va verificata la compatibilità con marca e modello del motore.'] }],
+['guida', /TIMONERI|VOLANT|MONOCAV|CAV[OI] .*(COMANDO|GUIDA)|MONOLEV|COMAND|CILINDR|ULTRAFLEX|UFLEX/, ['34'], {
+  cosa: 'Componente dei sistemi di guida e comando: trasmette i movimenti del timone o delle leve al motore.',
+  dove: 'Tra postazione di guida, motore e timone.',
+  quanto: 'Il tipo deve corrispondere al sistema montato; la lunghezza dei cavi si misura sul percorso reale, non in linea d\'aria.',
+  uso: 'Si installa seguendo le istruzioni del sistema montato; un cavo si sostituisce seguendo il percorso del vecchio, evitando curve strette.',
+  altri: 'Gli stessi comandi si usano su gommoni e piccole barche a motore.',
+  manut: 'Un comando duro o con gioco va controllato subito: è un organo di sicurezza.',
+  sapere: ['Sistemi meccanici e idraulici non si mescolano.', 'Per l\'installazione conviene un tecnico.'] }],
+['ferramenta', /CERNIER|SERRATUR|CHIUSUR|MANIGLI|POMOL|POMELL|SCROCC|CATENACC|GANC|ALZAPAIOL|FERMAPORT|NOTTOLIN|ARRESTO|FERMAVETR|APPENDIABIT|SQUADRETT|ANGOLAR/, ['02', '16'], {
+  cosa: 'Ferramenta per interni, gavoni e paioli: apre, chiude o tiene fermi sportelli, porte e piani.',
+  dove: 'Arredi di bordo, gavoni, paioli e porte.',
+  quanto: 'Prima di ordinare conviene prendere le misure di ingombro e, per cerniere e chiusure, il verso di apertura.',
+  uso: 'Si fissa con viteria inox; su pannelli sottili servono viti corte o rivetti.',
+  altri: 'La stessa ferramenta si usa su camper e su mobili esposti all\'umidità.',
+  sapere: ['In barca servono inox o ottone cromato: l\'acciaio comune arrugginisce in poco tempo.'] }],
+['viteria', /VIT[EI]|DAD[OI]|RONDELL|BARRA FILETT|RIVETT|COPIGLI|MICROFUSION|BOCCOL|PERNETT/, ['37', '02', '36'], {
+  cosa: 'Viteria e minuteria per i fissaggi a bordo.',
+  dove: 'Ovunque sulla barca, dalla coperta agli interni.',
+  quanto: 'Si vende sfusa o in confezione: meglio qualche pezzo in più della misura che serve.',
+  uso: 'Si usa la punta della misura corretta e, dove la vite attraversa la coperta, si sigilla il foro.',
+  altri: 'Serve anche per carrelli, rimorchi e lavori fuori dalla barca.',
+  sapere: ['In mare non si usano viti di ferro o acciaio comune, nemmeno zincate, se non per lavori provvisori: arrugginiscono e macchiano.', 'L\'inox AISI 316 è quello indicato per l\'esterno e per le parti immerse; l\'AISI 304 va bene per gli interni e per le zone riparate.', 'Metalli diversi a contatto (per esempio inox su alluminio) in ambiente marino si corrodono: conviene isolarli con pasta o rondella adatta.'] }],
+['scaletta', /SCALETT|PASSEREL|CORRIMAN|TIENTIBEN|BATTAGLIOL|CANDELIER|PULPIT|DRAGLI/, ['16', '01'], {
+  cosa: 'Accessorio per salire, scendere e muoversi in sicurezza a bordo.',
+  dove: 'Poppa, murata e coperta.',
+  quanto: 'Per le scalette bagno il numero di gradini si sceglie sull\'altezza del bordo libero: la scaletta deve scendere abbastanza sotto il pelo dell\'acqua da poter risalire.',
+  uso: 'Si fissa su struttura robusta con viteria inox, sigillando i fori.',
+  altri: 'La scaletta serve anche per il bagno e per rientrare dal tender.',
+  sapere: ['Una scaletta che non arriva abbastanza sotto il livello dell\'acqua è inutile proprio quando serve.'] }],
+['tendalino', /TENDALIN|BIMIN|TEL[OI]\b|CAPPOTTIN|COPRIMOTOR|COPERTUR|PASSATOI|MANICHE A VENTO|SPRAY ?HOOD/, ['16'], {
+  cosa: 'Copertura: ripara dal sole o dalla pioggia oppure protegge barca e motore.',
+  dove: 'Pozzetto, coperta, motore.',
+  quanto: 'Si misurano la superficie da coprire e i punti di aggancio disponibili.',
+  uso: 'Si tende bene, senza sacche dove ristagni l\'acqua, e si smonta con vento forte.',
+  altri: 'I teli coprono anche tender, gommoni e attrezzature in rimessaggio.',
+  manut: 'Si lavano con acqua dolce e si ripongono asciutti, altrimenti ammuffiscono.',
+  sapere: ['Le cuciture e i punti di aggancio sono i primi a cedere: vanno controllati ogni stagione.'] }],
+['cambusa', /FRIGO|GHIACCIA|FORNELL|BARBECUE|CAMPINGAZ|FABBRICATOR/, ['15'], {
+  cosa: 'Apparecchio per la cambusa e la cucina di bordo.',
+  dove: 'Cucina, dinette o pozzetto.',
+  quanto: 'La capacità si sceglie sulle persone a bordo e sulla durata delle uscite.',
+  uso: 'Il frigo va installato ventilato, con spazio dietro al gruppo; gli apparecchi a gas si usano solo con buona aerazione.',
+  altri: 'I modelli portatili servono anche in auto e in camper.',
+  sapere: ['Il consumo di un frigo elettrico va valutato insieme alle batterie.', 'Per gli impianti a gas a bordo valgono regole precise di sicurezza.'] }],
+['tavola', /PIATT|BICCHIER|TAZZ|VASSO|TOVAGL|CARAFF|MUG|POSAT|BOTTIGL|CESTIN|SECCHIELL|INSALATIER|COPPETT/, ['15', '16', '44'], {
+  cosa: 'Articolo per la tavola e la vita a bordo.',
+  dove: 'Dinette e pozzetto.',
+  quanto: 'In genere si vende a set, in base alle persone a bordo.',
+  uso: 'I modelli con base antiscivolo restano fermi anche con moto ondoso.',
+  altri: 'Vanno bene anche per casa al mare, piscina e camper.',
+  sapere: ['Per l\'uso in barca sono pratici i materiali infrangibili.'] }],
+['sub', /MUTA|MASCHER|PINN[AE]|SNORKEL|BOCCAGL|OCCHIALIN|FULLSUIT|SCARPETT|CALZAR/, ['43'], {
+  cosa: 'Attrezzatura per snorkeling, apnea o pesca subacquea.',
+  dove: 'In acqua, in immersione o in superficie.',
+  quanto: 'Si sceglie sulla taglia: maschera e muta devono calzare bene, altrimenti non servono.',
+  uso: 'La maschera si prova appoggiandola senza cinghiolo e inspirando dal naso: deve restare attaccata.',
+  altri: 'La stessa attrezzatura serve per pulire la carena, liberare l\'elica e recuperare oggetti caduti.',
+  manut: 'Risciacquo in acqua dolce dopo ogni uso e asciugatura all\'ombra.',
+  sapere: ['Per la pesca subacquea valgono regole su segnalazione, distanze e attrezzi.'] }],
+['sport', /\bSUP\b|KAYAK|PAGAI|GONFIABIL|CIAMBELL|SCI\b|TUBE|WAKEBOARD|JOBE|TRAINABIL|PISCIN/, ['43'], {
+  cosa: 'Articolo per lo sport e il divertimento in acqua.',
+  dove: 'In mare, al traino o a remi.',
+  uso: 'Al traino servono una cima adatta e una persona che guardi sempre chi è trainato.',
+  altri: 'SUP e kayak servono anche per spostarsi dalla rada alla spiaggia.',
+  sapere: ['In acqua vanno usati con aiuto al galleggiamento e nel rispetto delle distanze dalla costa.'] }],
+['abbigliamento', /GIACC|GILET|PANTALON|\bPOLO\b|SHIRT|MAGLIETT|SCARP[AE]\b|STIVAL|CAMICI|BERMUDA|\bPILE\b|SALOPETT|GUANT[OI]\b|CAPPELL|BERRETT|GONNA/, ['36', '44', '43', '07', '10'], {
+  cosa: 'Capo di abbigliamento.',
+  dove: 'A bordo e nel tempo libero.',
+  quanto: 'Si sceglie sulla taglia: conviene guardare la tabella taglie del produttore.',
+  manut: 'I capi impermeabili vanno lavati con prodotti specifici e riattivati, altrimenti perdono l\'idrorepellenza.',
+  sapere: [] }],
+['merchandising', /MATERIALE PROMOZIONAL|SHOPPER|PORTACHIAV|ADESIV[OI] MH|CATALOGO|BLOCK|GADGET/, ['44'], {
+  cosa: 'Articolo promozionale Marine Hardware.',
+  dove: 'Gadget, regalo o materiale da esposizione.',
+  quanto: 'Si vende singolo o a confezione.',
+  sapere: [] }],
+];
+// Verified products: figures taken one by one from the maker's own technical data sheet.
+// Each entry says where it comes from, and nothing here is estimated.
+const PROD = [
+  [/SCIROCCO 622 EXTRA/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/05/Scirocco-622-Extra.pdf', fonte: 'scheda prodotto Boero YachtCoatings', dati: [
+    'Resa teorica 8 m² al litro.',
+    'Diluente Boero 703.',
+    'Su scafi in alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/SCIROCCO 622 PLUS/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/05/Scirocco-622-Plus.pdf', fonte: 'scheda prodotto Boero YachtCoatings', dati: [
+    'Resa teorica 9,6 m² al litro.',
+    'Diluente Boero 703.',
+    'Su scafi in alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/CROSSOVER/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Crossover.pdf', fonte: 'scheda tecnica Boero Crossover', dati: [
+    'Resa teorica 8 m² al litro nei colori, 9,2 m² al litro nel bianco.',
+    'Due mani per una stagione, più una mano in più dove la carena sfrega o si consuma.',
+    'Spessore consigliato 50 micron a secco per mano.',
+    'Diluente Boero 703.',
+    'A 20 °C: seconda mano dopo almeno 6 ore, varo dopo almeno 12 ore ed entro 1-3 mesi. A 15 °C: 12 ore e 18 ore. Con il freddo i tempi si allungano.'] }],
+  [/ALTURA TC/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Altura-TC.pdf', fonte: 'scheda tecnica Boero Altura TC', dati: [
+    'Resa teorica 12,5 m² al litro con spessore secco di 40 micron.',
+    'Spessore per mano 30-40 micron a secco.',
+    'Diluente Boero 703, massimo 10%.',
+    'Sovrapplicazione dopo 18-24 ore secondo la temperatura, carteggiatura dopo 48 ore, polimerizzazione completa in 5-7 giorni.',
+    'Si applica tra 15 e 30 °C, con umidità non oltre l\'80%.'] }],
+  [/DELTA 3000/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Delta-3000.pdf', fonte: 'scheda prodotto Boero Delta 3000', dati: [
+    'Resa teorica 4,8 m² al litro con spessore di 100 micron.',
+    'Bicomponente, rapporto di miscelazione 4:1 in volume.',
+    'Diluente Boero 693.'] }],
+  [/DEFENDER/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Defender.pdf', fonte: 'scheda prodotto Boero Defender', dati: [
+    'Primer epossidico bicomponente ad alto spessore, rapporto 3:1 in volume.',
+    'Resa teorica 11 m² al litro a 60 micron, 3,6 m² al litro a 150 micron.',
+    'Diluente Boero 693: massimo 5% a pennello o rullo, massimo 25% a spruzzo.',
+    'Si applicano da 2 a 4 mani; entro tre mesi si può coprire con qualsiasi antivegetativa senza carteggiare.'] }],
+  [/ALTURA 619 EXTRA/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Altura-619-Extra.pdf', fonte: 'scheda prodotto Boero Altura 619 Extra', dati: [
+    'Resa teorica 8,3 m² al litro nei colori e 7,7 m² al litro nel bianco.',
+    'Diluente Boero 703.',
+    'Adatta ad acciaio, compositi e legno; sull\'alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/BOEROGUARD/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Boeroguard.pdf', fonte: 'scheda tecnica Boeroguard', dati: [
+    'Resa teorica 3,8 m² al litro a 200 micron.',
+    'Bicomponente, rapporto 4:1 in volume.',
+    'Diluente Boero 693, massimo 10%.',
+    'Spessore consigliato 150 micron a secco per mano.',
+    'A 20 °C: pot-life 2 ore, mano successiva dopo 12 ore ed entro 2 settimane, polimerizzazione completa in 7 giorni. Con il freddo i tempi raddoppiano.'] }],
+  [/MISTRAL FONDO/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Mistral-Fondo.pdf', fonte: 'scheda tecnica Boero Mistral Fondo', dati: [
+    'Resa teorica 6,3 m² al litro a 60 micron a secco.',
+    'Spessore consigliato 60 micron a secco per mano.',
+    'Diluente Boero 703 fino al 10%; sull\'acciaio la prima mano si diluisce al 5%, sul legno la prima mano va più diluita.',
+    'Mani consigliate: su acciaio una diluita più tre piene, su legno una diluita più due o tre piene, su vecchie verniciature una mano.',
+    'Mano successiva dopo 8 ore a 20 °C, 12 ore a 10 °C; essiccazione completa 7 giorni a 20 °C.'] }],
+  [/FISHERMAR/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Fishermar.pdf', fonte: 'scheda prodotto Boero Fishermar', dati: [
+    'Resa teorica 10 m² al litro a 50 micron.',
+    'Bicomponente, rapporto 3:1 in volume.',
+    'Diluente Boero 698 o P697.'] }],
+  [/SENTILAK/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Sentilak.pdf', fonte: 'scheda prodotto Boero Sentilak', dati: [
+    'Smalto monocomponente per sentine, resistente a oli, carburanti e detergenti.',
+    'Resa teorica 10 m² al litro a 50 micron.',
+    'Diluente Boero 703.'] }],
+  [/BIOLEGNO(?! ACQUA)/, { url: 'https://www.boero.it/wp-content/uploads/2021/07/scheda-tecnica-biolegno-cod-134-impregnante-protettivo-per-legno-boero.pdf', fonte: 'scheda tecnica Boero Biolegno', dati: [
+    'Resa 8-10 m² al litro sulla prima mano, oltre 15 m² al litro sulle mani successive, secondo quanto assorbe il legno.',
+    'Ciclo consigliato: una mano di fondo più due o tre di finitura, con leggera carteggiatura tra le mani.',
+    'Mano successiva dopo 12-24 ore a 20 °C; fuori polvere in 30-60 minuti.'] }],
+  [/SIKAFLEX 291/, { url: 'https://industry.sika.com/dam/dms/itgen/p/sikaflex_-291i.pdf', fonte: 'scheda tecnica Sika Sikaflex-291i', dati: [
+    'Sigillante elastico monocomponente per sigillature a bordo, anche interne, resistente alle vibrazioni.',
+    'Formati: 70 ml, cartuccia 300 ml, sacchetto 600 ml.',
+    'Fa pelle in circa 60 minuti a 23 °C: il giunto va rifinito prima.',
+    'Si applica tra 10 e 40 °C, meglio tra 15 e 25 °C; indurisce con l\'umidità dell\'aria, quindi con il freddo secco ci mette di più.',
+    'Il trattamento del supporto dipende dal materiale: va seguita la tabella dei pre-trattamenti Sika.'] }],
+  [/SIKAFLEX 292/, { url: 'https://industry.sika.com/dam/dms/itgen/o/sikaflex_-292i.pdf', fonte: 'scheda tecnica Sika Sikaflex-292i', dati: [
+    'Adesivo strutturale per giunti sottoposti a forti sollecitazioni, anche su alluminio, vetroresina e ABS.',
+    'Fa pelle in circa 40 minuti e ha un tempo aperto di 30 minuti: i pezzi vanno accoppiati prima che faccia pelle.',
+    'Si applica tra 10 e 40 °C, meglio tra 15 e 25 °C.',
+    'Si stende a cordolo triangolare per avere uno spessore di incollaggio uniforme.'] }],
+  [/^AWLGRIP TOPCOAT (WHITE|BLUE|GRIGI|ROSSI)/, { fonte: 'scheda tecnica Awlgrip Topcoat', dati: [
+    'Bicomponente, rapporto 1:1 in volume con il catalizzatore Awlcat.',
+    'Resa teorica 16 m² al litro per mano a spruzzo, allo spessore consigliato.',
+    'Spessore consigliato 25 micron a secco per mano; di solito tre mani a spruzzo, qualche colore ne richiede di più.',
+    'Diluenti Awlgrip T0001, T0002, T0003 o T0005.',
+    'A 25 °C: mano successiva dopo almeno 30 minuti ed entro 24 ore.'] }],
+  [/MILLE NCT/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/71890/it-IT', fonte: 'scheda tecnica Hempel\'s Mille NCT', dati: [
+    'Resa teorica 14 m² al litro.',
+    'Spessore consigliato 40 micron a secco per mano: due mani a pennello o rullo.',
+    'Diluente Hempel 08080, fino al 5% a pennello o rullo.',
+    'Mano successiva dopo 4 ore a 20 °C (7 ore a 10 °C); varo dopo almeno 24 ore a 20 °C ed entro 9 mesi.'] }],
+  [/HARD RACING TECCEL|HARD RACING/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/76890/it-IT', fonte: 'scheda tecnica Hempel\'s Hard Racing Teccel', dati: [
+    'Resa teorica 13 m² al litro.',
+    'Due mani da 40 micron a secco, più una mano in più sulla linea di galleggiamento e nelle zone che si consumano.',
+    'Diluente Hempel 08080, massimo 5% a pennello o rullo.',
+    'Mano successiva dopo 4 ore a 20 °C (8 ore a 10 °C); varo dopo almeno 24 ore a 20 °C ed entro 9 mesi.'] }],
+  [/LIGHT PRIMER/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/45551/it-IT', fonte: 'scheda tecnica Hempel\'s Light Primer 45551 (ed. 08/2025)', dati: [
+    'Primer epossidico bicomponente, rapporto 2:1 in volume (base 45559 + indurente 95360).',
+    'Resa teorica 8,2 m² al litro a 60 micron secchi.',
+    'Vita della miscela a 20 °C: 2 ore a spruzzo, 6 ore a pennello.',
+    'Sovraverniciabile a 20 °C dopo 4 ore e mezza ed entro 30 giorni; a 10 °C dopo 9 ore ed entro 60 giorni.',
+    'Superficie sopra i 10 °C e umidità sotto l\'85% durante applicazione e indurimento.',
+    'Sull\'alluminio il ciclo epossidico deve arrivare ad almeno 300 micron secchi in totale.'] }],
+  [/^AWLGRIP 545/, { url: 'https://specialtycoatings.brand.akzonobel.com/m/565ed512e6d1c980/original/545_Epoxy_Primer_eng_A4_20240405.pdf', fonte: 'scheda tecnica Awlgrip 545 Epoxy Primer (ed. 04/2024)', dati: [
+    'Primer epossidico bicomponente, rapporto 1:1 in volume con il convertitore D3001.',
+    'Dopo la miscelazione attendere 15 minuti prima di applicare.',
+    'Vita della miscela 16 ore a 15-25 °C, 8 ore a 35 °C.',
+    'Resa teorica 11,6 m² al litro per mano a 35 micron secchi.',
+    'A pennello o rullo sovraverniciabile a 25 °C da 12 a 24 ore; oltre le 24 ore va carteggiato.',
+    'Temperatura ambiente tra 13 °C e 41 °C.'] }],
+  [/^AWLCRAFT ?2000/, { url: 'https://specialtycoatings.brand.akzonobel.com/m/65415b38d8d102a/original/Awlcraft_2000_eng_A4_20211018.pdf', fonte: 'scheda tecnica Awlgrip Awlcraft 2000 (ed. 10/2021)', dati: [
+    'Smalto poliuretanico bicomponente: 2 parti di base e 1 di Awlcat #2 (G3010) in volume.',
+    'Si applica solo a spruzzo; non va usato sotto la linea di galleggiamento.',
+    'Vita della miscela 7 ore.',
+    'Resa teorica 17,8 m² al litro; di solito 3 mani, alcuni colori ne chiedono 4 o più.',
+    'Mano successiva a 25 °C dopo 30 minuti ed entro 24 ore; oltre le 24 ore va carteggiato.',
+    'Indurimento completo in 14 giorni. Temperatura ambiente tra 13 °C e 41 °C.'] }],
+  [/^EPIFANES VERNICI MONOCOMPONENTI/, { fonte: 'scheda tecnica Epifanes Clear Varnish (EN-001, 05/2022)', dati: [
+    'Vernice trasparente monocomponente ad alta brillantezza con filtro UV, per legno sopra la linea di galleggiamento, interni ed esterni.',
+    'Non adatta da applicare direttamente sulla resina epossidica.',
+    'Resa teorica 15 m² al litro a 35 micron.',
+    'Carteggiabile e sovraverniciabile a 20 °C dopo 24 ore (a 10 °C dopo 40 ore).',
+    'Sul legno nuovo: 3 mani diluite di fondo e almeno 4 mani di finitura.',
+    'Applicare tra 8 °C e 30 °C con umidità tra 50% e 85%.'] }, /^LUCIDA\b/],
+  [/^EPIFANES VERNICI MONOCOMPONENTI/, { fonte: 'scheda tecnica Epifanes Rapidclear (EN-006, 03/2022)', dati: [
+    'Resa teorica circa 13 m² al litro a 30 micron.',
+    'Applicare tra 8 °C e 30 °C con umidità tra 50% e 85%.',
+    'Per un risultato a specchio si carteggia l\'ultima mano con grana P220 e si finisce con 2 o più mani di Epifanes Clear Varnish o Woodfinish Gloss.'] }, /^RAPIDCLEAR\b/],
+  [/^ANTIVEGETATIVA MARLIN VELOX PLUS/, { url: 'https://marlinpaint.com/wp-content/uploads/2023/schede_tecniche/ENG_ANT_VELOX-PLUS.pdf', fonte: 'scheda tecnica Marlin Velox Plus (rev. 03/2023)', dati: [
+    'Antivegetativa per eliche, piedi poppieri, assi, flap, timoni e altre parti della propulsione.',
+    'Va data solo sopra Marlin Metal Primer (una mano) o sopra sé stessa: non è compatibile con altre antivegetative.',
+    'Due mani; una terza dove lo sporco attacca di più. Resa 10-11 m² al litro per mano.',
+    'A 20 °C: mano successiva dopo 3 ore, varo dopo 12 ore (a 10 °C 6 e 24 ore).',
+    'Diluente Marlin N. 4. Mescolare bene prima dell\'uso.',
+    'Il metallo si sgrassa con Solvent 102 Antisilicone o acetone puro, mai con acqua, detergenti o acidi.'] }],
+  [/^MARLIN METAL PRIMER/, { url: 'https://marlinpaint.com/wp-content/uploads/2023/schede_tecniche/ENG_PRI_METAL.pdf', fonte: 'scheda tecnica Marlin Metal Primer (rev. 03/2023)', dati: [
+    'Primer monocomponente per metalli prima dell\'antivegetativa Velox; va su bronzo, acciaio, alluminio, vernici originali dei piedi poppieri o cicli epossidici.',
+    'Una sola mano, leggera: mani più spesse peggiorano l\'adesione.',
+    'Resa 10-11 m² al litro. A 20 °C si copre con Velox Plus dopo almeno 3 ore.',
+    'Non va dato sopra altre antivegetative o altri primer monocomponenti.',
+    'Diluente Marlin N. 4. Mescolare bene prima dell\'uso.'] }],
+  [/^VENEZIANI EUROSPRINT NEXT/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Eurosprint-Next_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Eurosprint Next (cod. 6425)', dati: [
+    'Resa teorica 12 m² al litro.',
+    'Due mani da 50 micron secchi ciascuna.',
+    'A 20 °C: mano successiva dopo 6 ore, varo dopo 12 ore.',
+    'Diluente Veneziani 6470.',
+    'Sulle barche in alluminio va bene solo il colore bianco.'] }],
+  [/^VENEZIANI EUROSPRINT PRO/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Eurosprint_PRO_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Eurosprint Pro (cod. 6427)', dati: [
+    'Resa teorica 10,2 m² al litro nei colori, 9,2 m² al litro nel bianco.',
+    'Due mani da 50 micron secchi ciascuna.',
+    'A 20 °C: mano successiva dopo 6 ore, varo dopo 12 ore.',
+    'Diluente Veneziani 6470.',
+    'Per mare, acqua salmastra e dolce; sulle barche in alluminio va bene solo il colore bianco.'] }],
+  [/^UNIGLOSS SMALTO VENEZIANI/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Unigloss_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Unigloss (cod. 6726)', dati: [
+    'Smalto monocomponente alchidico-uretanico per sopra la linea di galleggiamento: non adatto all\'immersione continua.',
+    'Resa teorica 13,8 m² al litro.',
+    'Sul legno due mani da 40 micron secchi ciascuna.',
+    'A 20 °C: mano successiva dopo 18 ore, indurimento completo in 7 giorni.',
+    'Diluente Veneziani 6470.'] }],
+  [/^VENEZIANI SENTIFLEX/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Sentiflex.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Sentiflex (cod. 6510)', dati: [
+    'Smalto monocomponente pensato per le sentine; va su acciaio, alluminio, legno e vetroresina.',
+    'Resa teorica 12,7 m² al litro; due mani da 40 micron secchi.',
+    'A 20 °C: mano successiva dopo 8 ore, indurito dopo 24 ore.',
+    'Diluente Veneziani 6470.'] }],
+  [/^STUCCO SUB COAT XT/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Sub_Coat_Xt_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Sub Coat XT (cod. 6612)', dati: [
+    'Stucco epossidico bicomponente applicabile sott\'acqua, rapporto 1:1; si stende a spatola.',
+    'Serve per riparazioni temporanee di perdite e crepe anche con la barca in acqua.',
+    'Aderisce ad acciaio, alluminio, legno, vetroresina, gelcoat, vecchi epossidici e cemento.',
+    'Il diluente 6610 serve solo per pulire gli attrezzi.'] }],
+  [/^SISTEMA EPOSSIDICO VENEZIANI RESINA 3/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Resina_3__TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Resina 3+ (cod. W6721)', dati: [
+    'Epossidica strutturale senza solvente, rapporto 2:1, per legno e vetroresina.',
+    'Resa teorica 10 m² al litro; si applica a pennello o rullo.',
+    'A 20 °C: mano successiva tra 8 e 24 ore, indurita dopo 24 ore.',
+    'Il diluente 6610 serve solo per pulire gli attrezzi.'] }],
+  [/^SMALTO POLIURETANICO STOPPANI CLIPPER LUCIDO/, { fonte: 'scheda tecnica Lechler Stoppani Clipper S100, confermata dal catalogo Stoppani 2022', dati: [
+    'Smalto poliuretanico monocomponente lucido per sopra la linea di galleggiamento.',
+    'Resa teorica 6 m² al litro a 90 micron secchi.',
+    'A pennello o rullo diluire 10-20% (Diluente 277); a 20 °C mano successiva dopo 18 ore.'] }],
+  [/^STOPPANI CLIPPER BIANCO SATINATO/, { fonte: 'scheda tecnica Lechler Stoppani Clipper Satinato S101, confermata dal catalogo Stoppani 2022', dati: [
+    'Smalto poliuretanico monocomponente satinato, indicato in particolare per gli interni.',
+    'Resa teorica 5 m² al litro a 90 micron secchi.',
+    'Diluire 10-20% (Diluente 277).'] }],
+  [/^STOPPANI GLASSTOP$/, { fonte: 'scheda tecnica Lechler Stoppani Glasstop S106, confermata dal catalogo Stoppani 2022', dati: [
+    'Smalto poliuretanico bicomponente lucido per sopra la linea di galleggiamento.',
+    'Rapporto 3:1 in volume (3 parti di smalto, 1 di catalizzatore).',
+    'Resa teorica 8 m² al litro a 70 micron secchi.'] }],
+  [/^ANTIVEGETATIVA CUPRON 3/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Cupron-3.0_TDS_i.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Cupron 3.0 (cod. 6369)', dati: [
+    'Antivegetativa autolevigante per barche sotto i 25 nodi.',
+    'Resa teorica 8 m² al litro nei colori, 9,2 m² al litro nel bianco.',
+    'Due mani da 50 micron secchi ciascuna.',
+    'A 20 °C: mano successiva dopo 6 ore, varo dopo 12 ore.',
+    'Diluente Veneziani 6470. Tutti i colori vanno bene anche sugli scafi in alluminio.'] }],
+  [/^ANTIVEGETATIVA RAFFAELLO NEXT/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/06/Raffaello-Next_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Raffaello Next (cod. 6433)', dati: [
+    'Antivegetativa autolevigante per barche sotto i 25 nodi, a vela e a motore di media velocità.',
+    'Per mare caldo e temperato, acqua salmastra e dolce.',
+    'Resa teorica 10 m² al litro; due mani da 50 micron secchi.',
+    'A 20 °C: mano successiva dopo 6 ore, varo dopo 12 ore.',
+    'Diluente Veneziani 6470. Sulle barche in alluminio va bene solo il colore bianco.'] }],
+  [/^ANTIVEGETATIVA SPEEDY CARBONIUM/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2025/05/Speedy-Carbonium_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Speedy Carbonium (cod. 6432)', dati: [
+    'Antivegetativa bicomponente per barche da regata, rapporto 2:1; si applica a spruzzo o airless.',
+    'Resa teorica 10,6 m² al litro; due mani da 50 micron secchi.',
+    'A 20 °C: mano successiva dopo 4 ore, varo dopo 12 ore.',
+    'Diluente Veneziani 6470. Adatta anche all\'alluminio con il ciclo di fondi indicato dal produttore.'] }],
+  [/^GEL GLOSS PRO/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Gel-Gloss-PRO_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Gel Gloss Pro (cod. 6766)', dati: [
+    'Finitura poliuretanica bicomponente, rapporto 3:1, per sopra la linea di galleggiamento: non adatta all\'immersione continua.',
+    'Va su gelcoat o su fondi epossidici e poliuretanici.',
+    'Resa teorica 13,5-15,4 m² al litro; due mani da 40 micron secchi.',
+    'A 20 °C mano successiva tra 3 e 48 ore.',
+    'Diluente Veneziani 6780 tra 12 e 18 °C, 6700 tra 18 e 30 °C.'] }],
+  [/^SMALTO ELASTICO GUMMIPAINT/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Gummipaint.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Gummipaint (cod. 6715)', dati: [
+    'Smalto per gommoni: va su neoprene, tessuto gommato, PVC e Hypalon.',
+    'Resa teorica 3,8 m² al litro; due mani da 40 micron secchi.',
+    'A 20 °C: mano successiva dopo 8 ore, indurimento completo in 7 giorni.',
+    'Diluente Veneziani 6380.'] }],
+  [/^ANTIVEGETATIVA ADMIRAL 933/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Admiral-933-Plus.pdf', fonte: 'scheda prodotto Boero YachtCoatings Admiral 933 Plus', dati: [
+    'Antivegetativa autolevigante; il produttore indica protezione fino a 12 mesi.',
+    'Resa teorica 10 m² al litro.',
+    'Diluente Boero 703.'] }],
+  [/^ANTIVEGETATIVA GIRAGLIA 633/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/05/Giraglia-633-Extra.pdf', fonte: 'scheda prodotto Boero YachtCoatings Giraglia 633 Extra', dati: [
+    'Antivegetativa autolevigante per scafi in acciaio, compositi e legno; il produttore indica protezione fino a 36 mesi.',
+    'Resa teorica 8,3 m² al litro.',
+    'Diluente Boero 703.',
+    'Sull\'alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/^ANTIVEGETATIVA ALTURA 619 PLUS/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Altura-619-Plus.pdf', fonte: 'scheda prodotto Boero YachtCoatings Altura 619 Plus', dati: [
+    'Antivegetativa a matrice dura per scafi in acciaio, compositi e legno; il produttore indica protezione fino a 24 mesi.',
+    'Resa teorica 9,6 m² al litro.',
+    'Diluente Boero 703.',
+    'Sull\'alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/^ANTIVEGETATIVA SEASON 952/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Season-952-Extra.pdf', fonte: 'scheda prodotto Boero YachtCoatings Season 952 Extra', dati: [
+    'Antivegetativa a matrice dura per la protezione di una stagione.',
+    'Resa teorica 8 m² al litro.',
+    'Diluente Boero 703.',
+    'Sull\'alluminio serve prima un primer epossidico di almeno 300 micron.'] }],
+  [/^ANTIVEGETATIVA MAGELLAN 630/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/05/Magellan-630-Extra.pdf', fonte: 'scheda prodotto Boero YachtCoatings Magellan 630 Extra', dati: [
+    'Antivegetativa autolevigante senza stagno; il produttore indica protezione fino a 36 mesi.',
+    'Adatta a tutti i tipi di barca e di supporto, alluminio compreso.',
+    'Resa teorica 8 m² al litro.',
+    'Diluente Boero 703.'] }],
+  [/^SOTTOSMALTO BOERO EPOPLY/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Epoply.pdf', fonte: 'scheda prodotto Boero YachtCoatings Epoply', dati: [
+    'Fondo epossidico bicomponente, rapporto 4:1 in volume, facile da carteggiare.',
+    'Resa teorica 5 m² al litro a 100 micron.',
+    'Diluente Boero 693.'] }],
+  [/^ANTIRUGGINE BOERO NOXY/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Noxy.pdf', fonte: 'scheda prodotto Boero YachtCoatings Noxy', dati: [
+    'Antiruggine alchidica monocomponente al fosfato di zinco, senza cromati né piombo, per sopra la linea di galleggiamento.',
+    'Va su legno e acciaio.',
+    'Resa teorica 11 m² al litro a 50 micron.',
+    'Diluente Boero 703.'] }],
+  [/^IMPREGNANTE BIOWOOD/, { url: 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Biowood.pdf', fonte: 'scheda prodotto Boero YachtCoatings Biowood', dati: [
+    'Impregnante monocomponente che penetra nel legno, lo colora e lo protegge da funghi, muffe e insetti.',
+    'Resa teorica 30 m² al litro; a pennello o rullo.',
+    'Diluente Boero 703.'] }],
+  [/SIKAFLEX 221/, { url: 'https://industry.sika.com/dam/dms/itgen/2/sikaflex_-221.pdf', fonte: 'scheda tecnica Sika Sikaflex-221 (versione 04.02, 09/2019)', dati: [
+    'Adesivo-sigillante poliuretanico monocomponente multiuso; indurisce con l\'umidità dell\'aria.',
+    'Pellicola superficiale dopo 60 minuti a 23 °C e 50% di umidità; con il freddo indurisce più lentamente.',
+    'Applicare tra 5 °C e 40 °C, meglio tra 15 °C e 25 °C.',
+    'Si può verniciare, meglio dopo che si è formata la pellicola; la vernice nel giunto può crepare perché meno elastica.',
+    'Una volta indurito si toglie solo meccanicamente. Non resiste a solventi, acidi e soluzioni caustiche.'] }],
+  [/SIKAFLEX 295/, { url: 'https://industry.sika.com/content/dam/dms/fi01/r/sikaflex-295-uv.pdf', fonte: 'scheda tecnica Sika Sikaflex-295 UV (versione 03.02, 08/2026)', dati: [
+    'Sigillante e adesivo per incollare e sigillare vetri in plastica (policarbonato e plexiglas) e giunti esposti su barche e navi.',
+    'Pellicola superficiale dopo 60 minuti a 23 °C e 50% di umidità.',
+    'Applicare tra 10 °C e 35 °C, meglio tra 15 °C e 25 °C.',
+    'Resiste in servizio da -50 °C a 90 °C.',
+    'Si può verniciare; la vernice nel giunto può crepare perché meno elastica. Non resiste a solventi, acidi e soluzioni caustiche.'] }],
+  [/SIKAFLEX 290/, { url: 'https://gbr.sika.com/dam/dms/gb01/1/sikaflex-290-dcpro.pdf', fonte: 'scheda tecnica Sika Sikaflex-290 DC PRO (versione 03.01, 04/2023)', dati: [
+    'Sigillante per i comenti delle coperte in legno tradizionali di barche e navi.',
+    'Sul legno il primer è obbligatorio, ad esempio Sika Primer-290 DC.',
+    'Pellicola superficiale dopo 90 minuti a 23 °C e 50% di umidità; durezza Shore A 40.',
+    'Applicare tra 5 °C e 35 °C, meglio tra 15 °C e 25 °C.',
+    'Non resiste a solventi, acidi, soluzioni caustiche e detergenti con cloro.'] }],
+  [/^WEST SYSTEM RESINE EPOSSIDICHE/, { url: 'https://eu.westsystem.com/app/uploads/2023/07/WEST-SYSTEM-105-Epoxy-Resin-with-206-Slow-Hardener-Rev-2.pdf', fonte: 'scheda prodotto ufficiale West System 206 Slow Hardener', dati: [
+    'Indurente lento 206: 5 parti di resina 105 e 1 di indurente in volume.',
+    'A 22 °C: vita della miscela 20-25 minuti (100 g in un bicchiere), lavorabile in strato sottile 90-110 minuti, solido in 10-15 ore.',
+    'Temperatura minima di indurimento 16 °C.'] }, /206/],
+  [/^WEST SYSTEM RESINE EPOSSIDICHE/, { url: 'https://eu.westsystem.com/app/uploads/2023/07/WEST-SYSTEM-105-Epoxy-Resin-with-205-Fast-Hardener-Rev-2.pdf', fonte: 'scheda prodotto ufficiale West System 205 Fast Hardener', dati: [
+    'Indurente veloce 205: 5 parti di resina 105 e 1 di indurente in volume.',
+    'A 22 °C: vita della miscela 9-12 minuti (100 g in un bicchiere), lavorabile in strato sottile 60-70 minuti, solido in 6-8 ore.',
+    'Temperatura minima di indurimento 4 °C.'] }, /205/],
+  [/^WEST SYSTEM RESINE EPOSSIDICHE/, { url: 'https://eu.westsystem.com/app/uploads/2023/07/WEST-SYSTEM-105-Epoxy-Resin-with-205-Fast-Hardener-Rev-2.pdf', fonte: 'schede prodotto ufficiali West System 105, 205 e 206', dati: [
+    'La resina 105 si miscela 5:1 in volume con l\'indurente 205 (veloce) o 206 (lento).',
+    'Con il 205 indurisce anche a 4 °C, con il 206 serve almeno 16 °C.',
+    'Resina e indurente devono avere la stessa lettera di formato (A, B, C o E) sulla confezione.'] }, /RESINA 105/],
+  [/^INTERNATIONAL DANBOLINE/, { url: 'https://international-yachtpaint.com/s3/documents/TDS/Danboline_spa_A4_20230731.pdf', fonte: 'scheda tecnica International Danboline (07/2023)', dati: [
+    'Pittura per sentine, gavoni e paratie; resiste a olio e carburante e si pulisce facilmente.',
+    'Resa teorica 12,3 m² al litro a pennello; 1-2 mani da 40 micron secchi.',
+    'Mano successiva a 23 °C dopo 16 ore ed entro 2 giorni; a 15 °C dopo 24 ore ed entro 3 giorni.',
+    'Su legno, acciaio e alluminio nudi serve prima un primer (One UP o Intraprotect). Sopra si usano solo prodotti monocomponenti.',
+    'Diluente International N. 1; a spruzzo Thinner 910.'] }],
+  [/OWAGRIP/, { url: 'https://www.owatrol.com/media/akeneo_connector/media_files/F/I/FICHE_TECHNIQUE_OWAGRIP_11ec.pdf', fonte: 'scheda tecnica Owatrol Owagrip (12/2017)', dati: [
+    'Finitura poliuretanica monocomponente antisdrucciolo per ponti e superfici orizzontali.',
+    'Va su gelcoat, metallo nuovo o arrugginito, alluminio, legno e vecchie vernici.',
+    'Resa teorica 9-10 m² al litro per mano; due mani. Non si diluisce.',
+    'Tra una mano e l\'altra almeno 12 ore a 20 °C; calpestio leggero dopo 24 ore - 5 giorni, indurimento completo in 15 giorni.',
+    'Applicare tra 5 °C e 30 °C.'] }],
+  [/^AWLBRITE/, { fonte: 'scheda tecnica Awlgrip Awlbrite Clear (rev. 6, 01/2015)', dati: [
+    'Vernice trasparente uretanica: 2 parti di base J3005 e 1 di convertitore J3006 in volume.',
+    'Si aggiunge l\'attivatore: mezza parte di A0031 a pennello, 3/4-1 parte di A0001 a spruzzo.',
+    'Il produttore consiglia dieci mani per il risultato migliore.',
+    'A 25 °C mano successiva tra 3 e 36 ore senza carteggiare; indurimento completo in 7 giorni.'] }],
+  [/^AWLGRIP STUCCHI AWLFAIR/, { url: 'https://specialtycoatings.brand.akzonobel.com/m/4b0798be7d5add5f/original/Awlfair_LW_Fast_eng_A4_20190124.pdf', fonte: 'scheda tecnica Awlgrip Awlfair LW Fast Cure (01/2019)', dati: [
+    'Stucco Awlfair LW con convertitore veloce D7222: rapporto 1:1 in volume con la base D8200.',
+    'Vita della miscela 30-35 minuti a 25 °C, 80 minuti a 13 °C.',
+    'Carteggiabile dopo 6 ore a 25 °C, 17 ore a 13 °C.',
+    'Massimo 1 cm per strato. Usare tra 13 °C e 40 °C.',
+    'Sotto la linea di galleggiamento va sigillato con primer epossidico Hullgard; sopra con un primer epossidico Awlgrip.'] }, /FAST/],
+  [/HIGH PROTECT II/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/35780/it-IT', fonte: 'scheda tecnica Hempel\'s High Protect II 35780 (10/2026)', dati: [
+    'Primer epossidico per sotto la linea di galleggiamento su vetroresina e acciaio, e per prevenire e riparare l\'osmosi.',
+    'Rapporto 3:2 in volume (base 35789 + catalizzatore 95078). Non si diluisce.',
+    'Vita della miscela 45 minuti a 20 °C.',
+    'Resa teorica 6,6 m² al litro a 150 micron secchi.',
+    'A 20 °C mano successiva dopo 8 ore ed entro 5 giorni; oltre va irruvidito.',
+    'Contro l\'osmosi: tolto il gelcoat e asciugato lo scafo, 1 mano, stuccatura se serve, poi altre 3 mani da 150 micron.',
+    'Superficie sopra i 10 °C e umidità sotto l\'85%.'] }],
+  [/UNDERWATER PRIMER 26030/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/26030/it-IT', fonte: 'scheda tecnica Hempel\'s Underwater Primer 26030 (10/2026)', dati: [
+    'Primer rapido all\'alluminio per sotto la linea di galleggiamento: isola la vecchia antivegetativa o fa da strato di aggancio sopra il primer epossidico prima dell\'antivegetativa.',
+    'Va su vetroresina, legno e acciaio, chiglie comprese.',
+    'Resa teorica 7,8 m² al litro a 50 micron secchi.',
+    'L\'antivegetativa si può dare dopo almeno 2 ore e mezza a 20 °C.',
+    'Diluente Hempel 811: massimo 5% a pennello o rullo.'] }],
+  [/^HEMPEL'S SILIC ONE 77450/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/77450/it-IT', fonte: 'scheda tecnica Hempel\'s Silic One 77450 (11/2025)', dati: [
+    'Sistema antivegetativo a rilascio (antiaderente) per sotto la linea di galleggiamento su vetroresina, acciaio, alluminio e compensato.',
+    'Va sopra Hempel\'s Silic One Tiecoat. Non si diluisce.',
+    'Resa teorica 10 m² al litro a 80 micron secchi; due mani la prima volta, una mano per la manutenzione stagionale.',
+    'Varo dopo almeno 24 ore a 20 °C ed entro un mese.',
+    'Superficie sopra i 10 °C, umidità tra 30% e 85%.'] }],
+  [/PROFAIR 35290/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/35290/it-IT', fonte: 'scheda tecnica Hempel\'s Profair 35290 (10/2026)', dati: [
+    'Stucco epossidico per vetroresina, legno duro, acciaio e altri materiali rigidi, sopra e sotto la linea di galleggiamento.',
+    'Rapporto 1:1 in volume, si stende a spatola e non si diluisce.',
+    'Fino a 25 mm per strato senza colare.',
+    'A 20 °C carteggiabile dopo 24 ore, indurimento completo in 7 giorni.',
+    'Superficie sopra i 10 °C e umidità sotto l\'85%.'] }],
+  [/^RESINA EPOSSIDICA STRUTTURALE 10-10 CFS/, { url: 'https://www.cecchi.it/wp-content/uploads/2023/11/1010_cfs_tecnica.pdf', fonte: 'scheda tecnica Cecchi C-Systems 10 10 CFS', dati: [
+    'Epossidica pura per legno e vetroresina: impregnante, adesivo, stucco strutturale con gli additivi C-Systems, trattamento contro l\'osmosi.',
+    'Rapporto 2:1 in peso (100 g resina, 50 g indurente).',
+    'Vita della miscela a 25 °C (100 ml): 15-20 minuti con indurente standard, 12-16 veloce, 30-40 extra lento.',
+    'La temperatura di applicazione deve restare sempre sopra i 15 °C.'] }],
+  [/^EPIFANES VERNICI BICOMPONENTI/, { fonte: 'scheda tecnica Epifanes Poly-urethane Clear Gloss (EN-009, 03/2022)', dati: [
+    'Vernice poliuretanica bicomponente lucida con filtro UV; va su vecchie vernici poliuretaniche di qualsiasi marca, sopra l\'epossidica o sul legno nudo.',
+    'Rapporto 2:1 in peso (A:B).',
+    'Vita della miscela 3 ore a 20 °C, 2 ore a 25 °C.',
+    'Resa teorica 12 m² per kg a 30 micron.',
+    'Carteggiabile e sovraverniciabile dopo 24 ore a 20 °C (30 ore a 15 °C).',
+    'Applicare tra 10 °C e 30 °C con umidità tra 50% e 75%.'] }, /CLEARGLOSS/],
+  [/^EPIFANES VERNICI BICOMPONENTI/, { fonte: 'scheda tecnica Epifanes PP Varnish Extra (EN-011, 03/2022)', dati: [
+    'Vernice bicomponente lucida a essiccazione rapida per il legno sopra la linea di galleggiamento, anche teak e alberi.',
+    'Il filtro UV è limitato: all\'esterno va finita con una vernice con filtro UV (almeno 3 mani).',
+    'Vita della miscela 1 ora e mezza a 20 °C.',
+    'Resa teorica 14 m² al litro a 35 micron.',
+    'Mano successiva dopo 2-3 ore a 20 °C; almeno 3 mani, più sono meglio è.',
+    'Applicare tra 10 °C e 30 °C con umidità tra 50% e 75%.'] }, /PP EXTRA/],
+  [/^SIKA PRIMER 290/, { url: 'https://gbr.sika.com/dam/dms/gb01/i/sika_primer-290_dc.pdf', fonte: 'scheda tecnica Sika Primer-290 DC (versione 02.01, 03/2023)', dati: [
+    'Primer per incollare e sigillare i listelli delle coperte in legno (teak, mogano, pino dell\'Oregon) e la vetroresina, prima di Sikaflex-290 DC o Sikaflex-298.',
+    'Consumo circa 50 ml al m², secondo la porosità del legno.',
+    'Una sola mano sottile ma coprente, a pennello. Non va mai diluito né mescolato.',
+    'Applicare tra 5 °C e 40 °C, meglio tra 15 °C e 25 °C.',
+    'Richiudere subito la confezione: reagisce con l\'umidità.'] }],
+  [/^WEST SYSTEM ADDENSANTI/, { url: 'https://eu.westsystem.com/app/uploads/2022/10/Italian.pdf', fonte: 'scheda prodotto ufficiale West System 403 Microfibers', dati: [
+    'Addensante per ottenere un adesivo multiuso dall\'epossidica West System; l\'uso più comune è incollare il legno.',
+    'Riempie anche grandi fessure nei giunti senza perdere resistenza. Da indurito è bianco sporco.'] }, /^403/],
+  [/^WEST SYSTEM ADDENSANTI/, { url: 'https://eu.westsystem.com/app/uploads/2022/10/Italian.pdf', fonte: 'scheda prodotto ufficiale West System 406 Colloidal Silica', dati: [
+    'Addensante ad alta densità e molto resistente: controlla la fluidità dell\'epossidica e impedisce che coli su giunti verticali e sopra la testa.',
+    'Si usa per incollaggi e raccordi; aggiunto agli stucchi li rende più resistenti all\'abrasione.'] }, /^406/],
+  [/^WEST SYSTEM ADDENSANTI/, { url: 'https://eu.westsystem.com/app/uploads/2022/10/Italian.pdf', fonte: 'scheda prodotto ufficiale West System 407 Low-Density', dati: [
+    'Riempitivo a bassa densità per fare stucchi da carteggiare con l\'epossidica West System 105.',
+    'Una volta indurito si carteggia e si intaglia facilmente; diventa rosso-marrone scuro.'] }, /^407/],
+  [/^WEST SYSTEM ADDENSANTI/, { url: 'https://eu.westsystem.com/app/uploads/2022/10/Italian.pdf', fonte: 'scheda prodotto ufficiale West System 422 Barrier Coat Additive', dati: [
+    'Additivo per fare con l\'epossidica una barriera contro l\'osmosi del gelcoat nelle barche in vetroresina.',
+    'Si aggiunge il 15-20% in volume della resina già miscelata con l\'indurente.',
+    'Aumenta anche la resistenza all\'abrasione; indurito è grigio chiaro.'] }, /^422/],
+  [/^ANTIVEGETATIVA GUMMIPAINT/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Gummipaint_AF_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Gummipaint A/F (cod. 6435)', dati: [
+    'Antivegetativa elastica per gommoni in neoprene, tessuto gommato, PVC e Hypalon.',
+    'Si danno 2 mani da 25 micron sopra 2 mani di smalto Gummipaint.',
+    'Resa teorica 10 m² al litro.',
+    'A 20 °C: mano successiva dopo 8 ore, varo dopo 24 ore.',
+    'Diluente Veneziani 6380.'] }],
+  [/^GRIPTEX/, { url: 'https://specialtycoatings.brand.akzonobel.com/m/6631155c6dfe36f9/original/Griptex_eng_A4_20190118.pdf', fonte: 'scheda tecnica Awlgrip Griptex (01/2019)', dati: [
+    'Granuli di polimero da mescolare agli smalti Awlgrip per rendere antiscivolo ponti e gradini.',
+    'Dose: 227-284 grammi per ogni gallone (3,785 litri) di smalto già miscelato con il convertitore.',
+    'Si può anche spargere a secco sulla mano di smalto ancora appiccicosa e poi sigillare con 1-2 mani.',
+    'Non usare con pistole airless. Non applicare su superfici sotto i 15 °C o sopra i 40 °C.'] }],
+  [/^SIKA PULITORI-ATTIVATORI/, { url: 'https://industry.sika.com/dam/dms/itgen/s/sika_aktivator-205.pdf', fonte: 'scheda tecnica Sika Aktivator-205 (versione 03.03, 09/2026)', dati: [
+    'Promotore di adesione per superfici non porose (metalli, plastiche, superfici verniciate) prima di adesivi e sigillanti Sikaflex e Sikasil.',
+    'Si passa con un panno carta pulito appena inumidito, mai immerso; poco prodotto, perché l\'eccesso può far fallire l\'adesione.',
+    'Attendere da 10 minuti a 2 ore (a 23 °C) prima di incollare.',
+    'Non va usato su superfici porose né come semplice detergente.',
+    'Se diventa opaco invece che trasparente va buttato.'] }, /AKTIVATOR 205/],
+  [/^VERNICE MONO V-SHINE$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/V-Shine_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting V-Shine (cod. W6311)', dati: [
+    'Vernice trasparente lucida monocomponente per tutte le superfici in legno esposte, interne ed esterne.',
+    'Resa teorica 18 m² al litro; nel ciclo si danno 4-6 mani da 30 micron.',
+    'A 20 °C mano successiva tra 24 ore e 7 giorni; asciutta in profondità dopo 48 ore.',
+    'Diluente Veneziani 6470.'] }],
+  [/^VERNICE BICOMPONENTE VB-SHINE$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/VB-Shine_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting VB-Shine (cod. W6321)', dati: [
+    'Vernice trasparente lucida bicomponente, rapporto 2:1, per il legno; indicata nelle zone più sollecitate come corrimano e battagliole.',
+    'Resa teorica 9 m² al litro; nel ciclo si danno 4-6 mani da 30 micron.',
+    'A 20 °C mano successiva tra 6 ore e 2 giorni; asciutta in profondità dopo 24 ore.',
+    'Diluente Veneziani 6780 o 6700.'] }],
+  [/^ANTIVEGETATIVA PROPELLER$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Propeller_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Propeller (cod. 6440)', dati: [
+    'Antivegetativa a matrice dura per eliche, assi, piedi poppieri e flap, su acciaio e alluminio.',
+    'Va data sopra una mano di Propeller Primer: poi 2 mani da 60 micron.',
+    'Resa teorica 7,5 m² al litro.',
+    'A 20 °C: mano successiva dopo 6 ore, varo dopo 48 ore.',
+    'Diluente Veneziani 6470.'] }],
+  [/^PROPELLER PRIMER$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/10/de_Propeller_Primer.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Propeller Primer (cod. 6640)', dati: [
+    'Primer monocomponente di aggancio per l\'antivegetativa Propeller su eliche, assi e parti metalliche sommerse in acciaio e alluminio.',
+    'Una mano a pennello, poi 2 mani di Propeller.',
+    'A 20 °C si sovravernicia tra 6 e 12 ore.'] }],
+  [/^ADHERGLASS$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/06/Adherglass_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Adherglass (cod. 6624)', dati: [
+    'Primer di aggancio monocomponente per gelcoat, vetroresina e fondi epossidici, usato soprattutto sotto l\'antivegetativa.',
+    'Non serve carteggiare ma la superficie va sgrassata bene. Si dà a pennello, una mano.',
+    'Resa teorica 13,3 m² al litro.',
+    'A 20 °C si sovravernicia tra 3 e 12 ore.',
+    'Il diluente 6780 serve solo per pulire gli attrezzi.'] }],
+  [/^ADHERPOX$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Adherpox_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Adherpox (cod. 6210)', dati: [
+    'Primer epossidico bicomponente, rapporto 3:1, per opera viva e opera morta su acciaio, alluminio, legno e vetroresina.',
+    'Resa teorica 11,3 m² al litro.',
+    'A 20 °C si copre con l\'antivegetativa entro 3 mesi, o con sé stesso entro 6 mesi, senza carteggiare.',
+    'Indurimento completo in 7 giorni a 20 °C. Diluente Veneziani 6610.'] }],
+  [/^TICOPRENE$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Ticoprene.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Ticoprene (cod. 6420)', dati: [
+    'Primer monocomponente alluminato al clorocaucciù per legno, vetroresina e acciaio; resiste all\'immersione continua in acqua dolce e salata.',
+    'Si usa anche per isolare una vecchia antivegetativa.',
+    'Resa teorica 5,3 m² al litro; mani da 60 micron.',
+    'A 20 °C mano successiva dopo 8 ore, asciutto in profondità dopo 24 ore.',
+    'Diluente Veneziani 6470.'] }],
+  [/^AQUASTRIP$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Aquastrip_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Aquastrip (cod. 6040)', dati: [
+    'Sverniciatore in gel per togliere la vecchia antivegetativa da legno, ferro, plastica e metalli; ammorbidisce anche smalti e sottosmalti monocomponenti.',
+    'Secondo il produttore non intacca gelcoat e vetroresina.',
+    'Resa teorica 2-3 m² al litro; si stende a pennello.'] }],
+  [/^SOTTOSMALTO EPOWAY$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Epoway_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Epoway (cod. 6675)', dati: [
+    'Sottosmalto epossidico bicomponente con effetto barriera, rapporto 4:1, per acciaio, alluminio, legno e vetroresina; si applica a spruzzo.',
+    'Resa teorica 5 m² al litro; una mano da 100 micron.',
+    'A 20 °C mano successiva tra 18 e 72 ore; indurimento completo in 7 giorni.',
+    'Diluente Veneziani 6610.'] }],
+  [/^ANTISKID POWDER/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Antiskid_Powder_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Antiskid Powder (cod. 6530)', dati: [
+    'Polvere plastica da aggiungere agli smalti per rendere antiscivolo pavimenti e coperte.',
+    'Nei cicli del produttore si aggiunge a Gel Gloss Pro, Easylac o Unigloss.'] }],
+  [/^STUCCO EPOMAST$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Epomast_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Epomast (cod. 6662)', dati: [
+    'Stucco epossidico bicomponente, rapporto 1:1, a spatola, per acciaio, alluminio, legno e vetroresina.',
+    'Fino a 10 mm per passata. Prima di applicarlo la superficie va carteggiata.',
+    'Il diluente 6610 serve solo per pulire gli attrezzi.'] }],
+  [/^STUCCO EPOMAST EVO$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Epomast_Evo_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Epomast Evo (cod. 6660)', dati: [
+    'Stucco epossidico bicomponente ultraleggero, rapporto 1:1, a spatola, per grandi imperfezioni sopra e sotto la linea di galleggiamento.',
+    'Spessori elevati si fanno in più passate. Resa teorica 1 m² al litro.',
+    'Indurimento completo in 7 giorni a 20 °C. Il diluente 6610 serve solo per pulire.'] }],
+  [/^EPOMAST RAPIDO$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Epomast_Rapido_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting Epomast Rapido (cod. 6604)', dati: [
+    'Stucco epossidico bicomponente rapido, rapporto 1:1, per rasature e piccole riparazioni, sopra e sotto la linea di galleggiamento.',
+    'Massimo 1 cm per passata; si carteggia bene a secco e ad acqua.',
+    'Indurimento completo in 7 giorni a 20 °C. Il diluente 6610 serve solo per pulire.'] }],
+  [/^IMPREGNANTE S-PROTECT$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/S-Protect_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting S-Protect (cod. W6511)', dati: [
+    'Impregnante protettivo monocomponente per tutti i tipi di legno, interni ed esterni; si dà a pennello.',
+    'Resa teorica 30 m² al litro; una mano da 20 micron, poi 3-4 mani di SB-Protect.',
+    'Diluente Veneziani 6470.'] }],
+  [/^IMPREGNANTE S-PROTECT AQUA$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/S-Protect-Aqua_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting S-Protect Aqua (cod. W6512)', dati: [
+    'Impregnante protettivo monocomponente all\'acqua per il legno.',
+    'Resa teorica 30 m² al litro; una mano da 20 micron, poi 4-6 mani di V-Shine Aqua o V-Matt Aqua.',
+    'Si diluisce con acqua.'] }],
+  [/^IMPREGNANTE SB-PROTECT$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/SB-Protect_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting SB-Protect (cod. W6521)', dati: [
+    'Impregnante bicomponente, rapporto 1:1, per legni pregiati, compensato marino e MDF, soprattutto su legno nuovo o portato a nudo.',
+    'Resa teorica 13,3 m² al litro; nel ciclo 3-4 mani da 30 micron, bagnato su bagnato dopo 30 minuti - 1 ora a 20 °C.',
+    'Diluente Veneziani 6780.'] }],
+  [/^VERNICE MONO V-MATT AQUA$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/V-Matt-Aqua_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting V-Matt Aqua (cod. W6314)', dati: [
+    'Vernice trasparente satinata monocomponente all\'acqua per il legno; inodore.',
+    'Resa teorica 10 m² al litro; 4-6 mani da 30 micron.',
+    'A 20 °C mano successiva tra 24 ore e 7 giorni.',
+    'Si diluisce con acqua.'] }],
+  [/^VERNICE BICOMPONENTE VB-MATT AQUA$/, { url: 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/VB-Matt_Aqua_TDS.pdf', fonte: 'scheda prodotto ufficiale Veneziani Yachting VB-Matt Aqua (cod. W6324)', dati: [
+    'Vernice poliuretanica bicomponente all\'acqua, rapporto 5:1, non ingiallente, per paratie, mobili, superfici interne in legno, ponti e paglioli.',
+    'Non adatta all\'immersione continua.',
+    'Resa teorica 12 m² al litro; 4-6 mani da 30 micron.',
+    'A 20 °C mano successiva tra 12 e 36 ore.',
+    'Si diluisce con acqua.'] }],
+  [/^ZATTER[AE]\b/, { fonte: 'scadenzario nautico e centri di revisione autorizzati', dati: [
+    'Molte zattere da diporto prevedono il controllo in centro autorizzato ogni 2 anni, con revisione speciale ogni 5 anni; l\'intervallo esatto del modello è quello indicato dal produttore e sull\'etichetta.',
+    'Per alcune zattere entro le 12 miglia la prima revisione può essere prevista a 36 mesi: fa fede quanto indicato dal produttore sulla zattera.'] }],
+  [/^(FUOCHI|RAZZ|SEGNALI DI SOCCORSO)|FUMOGEN/, { fonte: 'scadenzario delle dotazioni di sicurezza da diporto', dati: [
+    'I segnali pirotecnici hanno una validità indicata sulla confezione, in genere di alcuni anni dalla fabbricazione (comunemente 4): alla scadenza non valgono più come dotazione.',
+    'I segnali scaduti non si buttano nei rifiuti: si consegnano secondo le indicazioni locali.'] }],
+  [/^ESTINTOR[EI]\b/, { fonte: 'scadenzario delle dotazioni di sicurezza da diporto', dati: [
+    'Gli estintori nautici non hanno una scadenza fissa: devono essere integri, con manometro in zona di carica, altrimenti vanno revisionati da una ditta specializzata.'] }],
+];
+const REP_NOTE = {
+  '01': { cosa: 'Articolo per l\'ormeggio e l\'ancoraggio.', dove: 'In coperta, a prua e a poppa, in ormeggio e in fonda.' },
+  '02': { cosa: 'Minuteria e ferramenta per la barca.', dove: 'Arredi, gavoni e parti interne.' },
+  '04': { cosa: 'Articolo di strumentazione per la navigazione.', dove: 'In plancia e in navigazione.' },
+  '07': { cosa: 'Articolo delle dotazioni di bordo.', dove: 'A bordo, tra le dotazioni di sicurezza o di servizio.' },
+  '10': { cosa: 'Prodotto o attrezzo per la manutenzione dello scafo.', dove: 'Nei lavori su scafo e coperta.' },
+  '13': { cosa: 'Prodotto o accessorio per la pulizia della barca.', dove: 'Nel lavaggio e nella cura di scafo, coperta e interni.' },
+  '15': { cosa: 'Articolo per la cambusa e la tavola di bordo.', dove: 'In cucina, dinette e pozzetto.' },
+  '16': { cosa: 'Accessorio per la vita a bordo.', dove: 'Negli allestimenti e negli impianti di bordo.' },
+  '19': { cosa: 'Articolo di raccorderia idraulica.', dove: 'Negli impianti idraulici e di scarico di bordo.' },
+  '22': { cosa: 'Componente dell\'impianto idraulico di bordo.', dove: 'Impianti dell\'acqua dolce, di sentina e di scarico.' },
+  '25': { cosa: 'Materiale elettrico per la barca.', dove: 'Negli impianti elettrici navali.' },
+  '28': { cosa: 'Anodo sacrificale per la protezione dalla corrosione.', dove: 'Sulle parti metalliche immerse.' },
+  '31': { cosa: 'Ricambio o prodotto per la manutenzione del motore.', dove: 'Su motori entrobordo e fuoribordo.' },
+  '34': { cosa: 'Componente dei sistemi di guida e comando.', dove: 'Tra postazione di guida, motore e timone.' },
+  '36': { cosa: 'Accessorio per vela, attrezzatura o abbigliamento tecnico.', dove: 'A bordo, soprattutto su barche a vela.' },
+  '37': { cosa: 'Viteria inox per i fissaggi a bordo.', dove: 'Ovunque sulla barca.' },
+  '42': { cosa: 'Attrezzatura di coperta.', dove: 'Nella manovra di vele e cime.' },
+  '43': { cosa: 'Articolo per pesca, sport e tempo libero in acqua.', dove: 'In mare e in spiaggia.' },
+  '44': { cosa: 'Articolo promozionale Marine Hardware.', dove: 'Gadget e abbigliamento con il marchio.' },
+};
+// Materials: what holds up in salt water and what does not.
+// When nothing matches by name, some departments are themselves a family: an article of
+// department 28 is an anode, one of 37 is stainless fastening, and so on.
+// Names that a family pattern catches but that are not that kind of product (accessories,
+// spare parts, tools sold next to it). They get no family sheet rather than a wrong one.
+const EXCL = {
+  abbigliamento: /ANTINFORTUN|SALDATOR|COPRISCARP|IMMERSION|PROTEZIONE|TYVEK|TYCHEM/,
+  abrasivi: /PISTOL|SPATOL|SEGACC|\bLAME\b|TERMOSOFF|PLURIBALL|MULTICELL|CARTONE|\bFILM\b|SCROSTATOR|LANA DI|STUOIA|PENNELL|VASCHETTA|RULLIN|RULLO|RASCHIETT|SACCHI|INTERFACCIA|NASTRO|MASCHERATURA|ELMETT|CARTA IGIENICA|MICROBLU|COPERTURA|ANTISDRUCC|RACCORDO|TUBO/,
+  ancora: /GALLEGGIANTE|\bBAG\b/,
+  bandiera: /TABELLA|PASTA/,
+  batteria: /TESTER|MONITOR/,
+  bussola: /BINOCOL/,
+  cambusa: /CUSCINI|FLANGIA|TRASFORMATORE|REGOLATORE|BOMBOLE|CARTUCC/,
+  cima: /RADDRIZZ|ELASTIC|AVVIAMENTO|APPESANTITA|DI MASSA|GUAINA|PROTEGGI|AVVOLGITORE|TAGLIA|MORSETTO|TERMINALI|TAPPETI|GUIDA-CIME|STROZZA|PALLINE|PIASTRINE|SACCHE|LANCIASAGOL|SNUBBER/,
+  collegamenti: /PINZA|PASSACAVI/,
+  coltello: /PORTAUTENSIL/,
+  coperta: /GINOCCHIER|COPRIWINCH|PORTAMANIGL|TENSIOMETR|GRASSO|SERVICE KIT|MOLLE|KIT RICAMBIO|MANIGLI|FEEDER|STICK|BANSIGO|STRISCE|LUBRIFICANT|ACCESSORI/,
+  detergente: /SIKA|ACETONE|POLISH|SALVIETT/,
+  elettronica: /GX 1400|SONDA US|OROLOGIO|ANGOLO DI BARRA|CAVO ADATTATORE|UPDATER|CONNETTORI|PORTATRASDUTTORE|CAVI DI PROLUNGA|PILOTA|AUTOPILOT/,
+  elica: /SDOPPIATORE|TUNNEL|COMANDI|PIEDINO|BOW|PROTEZIONE|OLIO|KIT ELICA/,
+  'elica-manovra': /TUNNEL|ACCESSORI|SDOPPIATORE/,
+  estintore: /VANO|SUPPORT/,
+  fascette: /COLLARE D|BASETTE|SUPPORTI/,
+  ferramenta: /BIDET|FORCELLA|OBLO|MEZZO MARINAIO|ACCOSTO|BASE RETTANGOLARE|MANIGLI[AE] (DI POPPA|ABBATTIBILE|PER CRUSCOTTO)|GANCIO PER SCALETTE|DADO A MANIGLIA|PROFILO|ANGOLARE A|CANCELLETTO/,
+  filtro: /CHIAVE|STAFF|IMBUTO|O-RING|COPERCHIO|CESTELL|RACCORDI|VALVOLA/,
+  grillo: /TRAPPE|SALPA TRAPPA|CARRELLO/,
+  guida: /OLIO/,
+  interruttore: /MUSONE|STAFFA|GOMMINI|ETICHETTE|DOCCETTA|PANNELLO/,
+  inverter: /GENERATOR/,
+  lampadina: /DIMMER/,
+  lubrificante: /CONTACT CLEANER|INGRASSATORE|CRICCHE|LABEL OFF|POWER CLEAN|INOX KLEEN|SGRASSAGGIO/,
+  luce: /LUCE DI VIA|IMBARCAZIONI|ALTOPARLANT|GIUBBOTT|BOETTA|\bASTA\b|FANAL|TESTA ALBERO|PROFILI|ALIMENTATOR|DIMMER|CONTROLLER|CONNETTORE|\bCAVO\b|\bCLIP\b|LAMPADIN|GERMICIDA|PORTALAMPADA|SPIA|FUSE|LUCI DI VIA|\bBASE\b/,
+  motore: /TRIM|PREMISTOPP|SPECIFICHE|PUNTELLO|COMPRESSOR|PUNTE|ASSORBI|EMULSIONABIL|TAGLIO|IDRAULIC/,
+  parabordo: /PORTAPARABORD|GANCETTI|PROFILI|COPRIPARABORD/,
+  pile: /CARICABATTERI/,
+  pompa: /VASO|VASI|ESTRATTOR|BLOWER|ASPIRATOR|AERATOR|PANNELLO|TOILETTE|MACERATOR|RICAMBI|ADATTATORE|KIT MOTORE|POZZETTO|OSSIGENAT/,
+  presa: /MONITOR|\bASTA\b|STRISCE|MODULI/,
+  raccordo: /TOILETTE|TAPP|FILO|GUARNIZION|REMI|PILETTE/,
+  resina: /POLISH|PASTA ABRASIVA|DILUENTE|\bLAMA\b|TESSUTO DI PROTEZIONE|COLORANTE|POMPE DOSATRICI|RULLINI/,
+  riflettente: /\bLUCE\b|POSTER|ATOLLO/,
+  sagola: /LANCIASAGOL/,
+  salvataggio: /\bLUCE\b|BORSA|RIARMO|BOMBOLETT|CONTENITORE|CUSTODIA|SUPPORTO|PORTA ?SALVAGENTE|PALO|DAN BUOY|MANOVERBOARD|GUINZAGLIO/,
+  scaletta: /GANCIO|SNODO|TAPPO|RETE|ATTACCO|RADIOCOMAND|KIT ELETTRONICA|BILANCINO|CANDELIERE PER|RICAMBI|ACCESSORI|SUPPORT|SOTTOBASETT|MOLLA|PULPIT/,
+  'segnali-diurni': /SEGNALETICA|ADESIVI|TABELLA/,
+  sentina: /ALLARME|SENSORE|PANNELLO|DISPLAY/,
+  serbatoio: /TAPPO|KIT (ACQUA|MISCELATORE|PER SERBATOI)|RACCORDI|BOTOLA|TERMOSTATO|RESISTENZ|TUBO|SFIATO|ACCESSORI/,
+  sigillante: /PRIMER|DILUENTE|SPATOLA|PULITOR|SALVIETT|NASTRO|CLEANER|PISTOL|MIXER|\bFILM\b|RIMUOVI|CORDOLO|SISTEMA DI APPLICAZIONE|PROPSPEED|DISCHETTI|AIRBLOCK|\bLAME\b|\bCRC\b|SILICON OIL|TEAK OIL|SPATOLE/,
+  sport: /GONFIATORE/,
+  strumento: /CAP HORIZON|METEO|E-RACING|BARIGO|GHIERE|GUARNIZIONE/,
+  tavola: /COMPASSO|PROFILO/,
+  tendalino: /MANICHE A VENTO|PASSATOI|BARRE|\bASTE\b|PUNTONI|MANICHETTA|FORCELLA|ATTACCHI/,
+  tubo: /SUPPORT|ADATTATORE|\bBASE\b|CAPPUCCIO|ALLUMINIO|\bINOX\b|QUADRO|RETTANGOLARE|TAGLIATUBI|GIUNTATUBI|PORTATUBO|BUSSOLA|SIGILLANTE|FASCETTE|OLIO|GRASSO|ARIA|AIR-TERM/,
+  utensili: /CERNIER|FERMAPORTA|TAPPI|CHIAVETTA STOP|STACCO|LUCCHETT|PENNAREL|PLATORELL/,
+  valvola: /POZZETTO|COLLETTORE|SCARICO A MARE|FILTRO|TUBO DOCCIA|FLESSIBILI|SALISCENDI|DOCCIA SOLARE|KIT DOCCETTA/,
+  vernice: /SIKA|PLEXUS|TAMPONE|\bFILM\b|SVERNICIATORE|TAZZE|SISTEMA PER VERNICIATURA|VASCHETTA|DILUENT|REDUCER|ACCELERA|AWLCAT|HARDENER|FLATTENING|GRIPTEX|AWLWASH|AWLCARE|STUCC|MICROFIBRE|MICROSFERE|MICROSILICE|RESINA|AWLFAIR|EPOXY FILLER|PROFAIR|THINNER/,
+  verricello: /MASCHERINA|^MOTORI|MUSONE|MOTORI PER|RIDUTTORI|BARBOTIN|TONNEGG|RECUPERO TENDER|LEVE/,
+  vhf: /EPIRB|PMR|AUTORADIO|\bTV\b|ANTENNA PASSIVA|SPORTELLINO|ALTOPARLANTE|SPLITTER|CONNETTORI|\bBASE\b|\bBASI\b|STAFFA|ACCESSORI|GANCIO|AM\/FM/,
+  viteria: /SCALINO|ROPEYE|PISTOL|RIVETTATRIC/,
+  bitta: /CURSOR/,
+  zattera: /GANCIO|PORTA ZATTERA|SELLE/,
+};
+const REP_FAM = { '28': 'anodo', '37': 'viteria' };
+const MATS = [
+  [/AISI ?316|INOX ?316|\bA4\b/, 'Acciaio inox AISI 316: è l\'inox indicato per l\'esterno e per le parti immerse. In acqua ferma e senza ossigeno può comunque fare corrosione interstiziale, quindi i perni immersi vanno controllati.'],
+  [/AISI ?304|INOX ?304|\bA2\b/, 'Acciaio inox AISI 304: adatto a interni e zone riparate; all\'esterno e in acqua di mare tende a macchiarsi e a corrodersi più del 316.'],
+  [/INOX|AISI/, 'Acciaio inox: resiste bene in ambiente marino, meglio nelle qualità 316 rispetto alle 304.'],
+  [/TITANIO/, 'Titanio: ottimo in acqua di mare, non si corrode, ma è costoso.'],
+  [/ZINCAT|GALVANIZZAT/, 'Acciaio zincato: va bene per catene e usi pesanti, ma la zincatura si consuma e poi arrugginisce; in acqua salata ha vita più corta dell\'inox.'],
+  [/\bFERRO\b|ACCIAIO (?!INOX|INOSSIDABILE)/, 'Acciaio comune: non adatto all\'esposizione marina prolungata, arrugginisce e macchia; si usa solo dove è protetto o provvisorio.'],
+  [/OTTONE/, 'Ottone: adatto a interni e raccordi; in acqua di mare può perdere lo zinco e diventare fragile se non è di qualità marina.'],
+  [/BRONZO/, 'Bronzo: molto usato per prese a mare e raccordi immersi, resiste bene all\'acqua salata.'],
+  [/ALLUMINI/, 'Alluminio: leggero, ma a contatto con inox o rame in acqua salata si corrode: va isolato.'],
+  [/NYLON|POLIAMMID/, 'Nylon: leggero e non si corrode; assorbe un po\' d\'acqua e con il sole invecchia.'],
+  [/POLIPROPILEN/, 'Polipropilene: galleggia, costa poco, ma soffre i raggi del sole.'],
+  [/POLIESTER/, 'Poliestere: buona resistenza all\'usura e al sole.'],
+  [/DYNEEMA|HMPE/, 'Dyneema: carico molto alto a parità di diametro, poco elastico, indicato per drizze e manovre.'],
+  [/\bPVC\b/, 'PVC: economico e resistente all\'acqua, meno al sole e al calore.'],
+  [/TEAK/, 'Teak: legno adatto all\'esterno grazie agli oli naturali; va curato ma non è obbligatorio trattarlo.'],
+  [/CROMAT/, 'Metallo cromato: all\'esterno, con il tempo, la cromatura si può opacizzare.'],
+  [/COMPOSIT|VETRORESIN/, 'Materiale composito: non si corrode e resiste bene all\'ambiente marino.'],
+  [/GOMMA|NEOPREN/, 'Gomma: buona tenuta, ma invecchia con il sole e con gli idrocarburi.'],
+];
+const DATI = [
+  [/resa teorica[^.;]*|\bresa\b[^.;]*/i, 'Resa'], [/diluizione[^.;]*/i, 'Diluizione'],
+  [/carico di rottura[^.;)]*/i, 'Carico di rottura'], [/bicomponente[^.;]*/i, 'Miscelazione'],
+  [/\b(12|24|220|230)\s?V\b/i, 'Tensione'], [/\bIP\s?\d{2}\b/i, 'Protezione'],
+  [/\bSOLAS\b|\bMED\b|omologat[oa]|regolamentare/i, 'Omologazione'],
+];
+const SKIP_COL = /prezzo|listino|euro|€|sconto|netto/i;
+
+function cap(s) { s = String(s || '').trim(); return s.charAt(0).toUpperCase() + s.slice(1); }
+function low(s) { return String(s || '').toLowerCase().trim(); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// Official producer data sheets for articles that have no verified Più info data (same rule: producer's own file only).
+const SCHEDE = [
+  [/^SMALTO POLIURETANICO BOERO 953/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Smalto-poliuretanico.pdf'],
+  [/^BOERO FRESH WATER/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Boero-Fresh-Water-EU.pdf'],
+  [/^BOERO GREY WATER/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Boero-Grey-Water.pdf'],
+  [/^BOERO DILUENTI PRO/, /P698/, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Thinner-Pro.pdf'],
+  [/^BOERO DILUENTI PRO/, /P696/, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Thinner-Pro-Fast.pdf'],
+  [/^SIKAFORCE 436 L25/, null, 'https://ita.sika.com/dms/getdocument.get/74701fb7-84f4-463f-ad0f-447cb179c4c9/sikaforce-436-l25.pdf'],
+  [/^ADESIVI SIGILLANTI SIKA$/, null, 'https://ita.sika.com/dam/dms/itgen/o/sikaflex_-591.pdf'],
+  [/^SIKAFLEX 252/, null, 'https://ita.sika.com/dms/getdocument.get/cef46950-079b-46f2-b08b-a78c9c0454ac/sikaflex_-252.pdf'],
+  [/^SIKAFLEX 296/, null, 'https://industry.sika.com/dam/dms/itgen/s/sikaflex_-296.pdf'],
+  [/^SIKAFLEX 521/, null, 'https://ita.sika.com/dam/dms/itgen/m/sikaflex_-521_uv.pdf'],
+  [/^SIKAFLEX 212/, null, 'https://ita.sika.com/content/dam/dms/itgen/8/sikaflex-212-fc.pdf'],
+  [/^SIKAFLEX 11 ?FC/, null, 'https://ita.sika.com/dam/dms/itgen/m/sikaflex-11-fc-purform.pdf'],
+  [/^SIKAFLEX 298/, null, 'https://ita.sika.com/content/dam/dms/itgen/i/sikaflex_-298_fc.pdf'],
+  [/^SIKA PRIMER 209/, null, 'https://industry.sika.com/dam/dms/itgen/r/sika_primer-209_d.pdf'],
+  [/^SIKA PRIMER 206/, null, 'https://industry.sika.com/dam/dms/itgen/t/sika_primer-206_gp.pdf'],
+  [/^SIKA PRIMER 207/, null, 'https://industry.sika.com/dam/dms/itgen/t/sika_primer-207.pdf'],
+  [/^SIKA PRIMER 210/, null, 'https://industry.sika.com/dam/dms/itgen/7/sika_primer-210.pdf'],
+  [/^SIKA MARINEMULTIPRIMER/, null, 'https://industry.sika.com/dam/dms/itgen/o/sika_multiprimermarine.pdf'],
+  [/^SIKA PULITORI-ATTIVATORI/, /AKTIVATOR 100/, 'https://industry.sika.com/dam/dms/itgen/5/sika-aktivator-100.pdf'],
+  [/^SIKA PULITORI-ATTIVATORI/, /REMOVER 208/, 'https://industry.sika.com/dam/dms/itgen/n/sika_remover-208.pdf'],
+  [/^SIKA CLEANER G\+P/, null, 'https://gbr.sika.com/dam/dms/gb01/a/sika-cleaner-g-plus-p.pdf'],
+  [/^SIKAFAST 555/, null, 'https://industry.sika.com/content/dam/dms/itgen/z/sikafast_-555_l03.pdf'],
+  [/^SIKAFORCE 436 L120/, null, 'https://ita.sika.com/dms/getdocument.get/d547c1f2-2220-4b54-92d4-a95df7d6fb58/sikaforce-436-l120.pdf'],
+  [/^SIKASIL WS 605/, null, 'https://ita.sika.com/dam/dms/itgen/a/sikasil-ws-605-s.pdf'],
+  [/^SIKASIL UNIVERSAL/, null, 'https://ita.sika.com/dam/dms/itgen/p/sikasil-universal.pdf'],
+  [/^SIKASIL SG-20/, null, 'https://gbr.sika.com/dms/getdocument.get/518c5060-58a4-3457-90ac-8f45fc87b5b8/Sikasil%20SG-20.pdf'],
+  [/^SIKA TEAK OIL/, null, 'https://ita.sika.com/dms/getdocument.get/7760ae3e-7bb2-33cd-8805-206ebcb6184d/Sika_Teak_Oil_Neutral_08-15-ITA.pdf'],
+  [/^SIKABOOM$/, /400/, 'https://ita.sika.com/dam/dms/itgen/4/sika-boom-400-fire.pdf'],
+  [/^SIKAFIRESIL MARINE/, null, 'https://ita.sika.com/dms/getdocument.get/8c8b9f4f-5ac0-4d5d-b778-5038c61528e6/sikafiresil-marinen.pdf'],
+  [/^SIKAFIRESTOP MARINE/, null, 'https://ita.sika.com/dms/getdocument.get/f3e1cf56-7b0b-3ea1-beaf-10debe9fd251/SikaFirestop_Marine_08-15-ITA.pdf'],
+  [/^SIKA 112 CRYSTAL/, null, 'https://ita.sika.com/content/dam/dms/itgen/q/sikaflex_-112_crystalclear.pdf'],
+  [/^SIKA ANCHORFIX/, null, 'https://ita.sika.com/dam/dms/itgen/6/sika_anchorfix_-1n.pdf'],
+  [/^SIKASEAL 157/, null, 'https://ita.sika.com/dms/getdocument.get/2b671512-e209-467c-91cb-f1d668fb4564/sikaseal-157.pdf'],
+  [/^SIGILLANTE SILICONICO SIKASEAL/, /174/, 'https://ita.sika.com/dms/getdocument.get/05689ea4-0778-4138-9827-3cfaa9cc29d1/sikaseal-174.pdf'],
+  [/^SIGILLANTE SILICONICO SIKASEAL/, /175/, 'https://ita.sika.com/dam/dms/itgen/j/sikaseal-175.pdf'],
+  [/^STUCCO EPOMAR BOERO/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/02/Epomar.pdf'],
+  [/^SMALTO BOERO BISE/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Bise.pdf'],
+  [/^SMALTO BOERO FUTURA/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Futura.pdf'],
+  [/^PRIMER BOERO ANCHORGUARD/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Anchorguard.pdf'],
+  [/^FONDO BOERO DELTA UC HB/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Delta-UC-HB.pdf'],
+  [/^SOTTOSMALTO BOERO UNDERCOAT PRO/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Undercoat-Pro.pdf'],
+  [/^BOERO ORION PRIMER/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Orion-Primer.pdf'],
+  [/^BOERO STUCCO EPOYACHT/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/02/Epoyacht.pdf'],
+  [/^IMPREGNANTE BOERO BIOLEGNO ACQUA/, null, 'https://www.boero.it/wp-content/uploads/2021/07/scheda-tecnica-biolegno-acqua-cod-132-impregnante-protettivo-per-legno-all-acqua-boero.pdf'],
+  [/^BOERO DILUENTI$/, /\b703\b/, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Thinner-703.pdf'],
+  [/^BOERO DILUENTI$/, /\b693\b/, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Thinner-693.pdf'],
+  [/^BOERO DILUENTI$/, /\b698\b/, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2025/11/Thinner-698.pdf'],
+  [/^DILUENTI VENEZIANI/, /6\.610/, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Diluente_6610_TDS.pdf'],
+  [/^DILUENTI VENEZIANI/, /6\.780/, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Diluente_6780_TDS.pdf'],
+  [/^DILUENTI VENEZIANI/, /6\.380/, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Diluente_6380_TDS.pdf'],
+  [/^DILUENTI VENEZIANI/, /6\.470/, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Diluente_6470.pdf'],
+  [/^DILUENTI VENEZIANI/, /6\.700/, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Diluente_6700_TDS.pdf'],
+  [/^MICROFIBRE VENEZIANI R-FIBERS/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/R-Fibers_TDS.pdf'],
+  [/^MICROSFERE VENEZIANI R-SPHERES/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/R-Spheres_TDS.pdf'],
+  [/^MICROSILICE VENEZIANI R-SILICIES/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/R-Silicies_TDS.pdf'],
+  // Kong and Liros: copied from the producers' own files (Liros: the rope's page of its official catalogue)
+  [/^GIUNTO GIREVOLE KONG/, null, 'https://www.kong.it/upload/files/I_KONG_SWIVEL_ANCHOR_CONNECTOR.pdf'],
+  [/^MOSCHETTON[EI]\b.*\bKONG\b/, null, 'https://www.kong.it/upload/files/I_KONG_CONNECTORS_Y5529B00ZMK.pdf'],
+  [/^DYNEEMA RACER 2001/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=14'],
+  [/^DYNEEMA REGATTA 2000/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=15'],
+  [/^DYNEEMA SCALZATO D-PRO (?!VISION)/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=17'],
+  [/^SCOTTA\/DRIZZA HERKULES WHITE/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=18'],
+  [/^SCOTTA\/DRIZZA HERKULES (COLOR|TOPGRIP)/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=19'],
+  [/^SCOTTA LIROS TOP CRUISING/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=20'],
+  [/^SCOTTA LIROS SEASTAR/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=21'],
+  [/^SCOTTA LIROS NAUTIC/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=22'],
+  [/^DYNEEMA MAGIC PRO/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=35'],
+  [/^CIMA TECNICA MAGIC SHEET/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=38'],
+  [/^GRILLI LIROS SOFT SHACKLE/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=40'],
+  [/^LIROS MOOREX 12/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=30'],
+  [/^LIROS HANDY-ANCHOR/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=33'],
+];
+function explain(i) {
+  const r = INDEX.rows[i], b = INDEX.blocks[r.b] || {}, rep = r.c.slice(0, 2);
+  const name = (b.t || '').trim(), NAME = name.toUpperCase();
+  const DESC = (b.d || '').toUpperCase(), text = NAME + ' ' + (b.s || '').toUpperCase() + ' ' + DESC;
+  const ok = (re, reps, t, k) => (!reps || reps.includes(rep)) && re.test(t) && !(EXCL[k] && EXCL[k].test(NAME));
+  const head = NAME.split(/\s+/).slice(0, 3).join(' ');
+  const hit = FAM.find(([k, re, reps]) => ok(re, reps, head, k)) || FAM.find(([k, re, reps]) => ok(re, reps, NAME, k))
+    || (REP_FAM[rep] && !(EXCL[REP_FAM[rep]] && EXCL[REP_FAM[rep]].test(NAME)) ? FAM.find(([k]) => k === REP_FAM[rep]) : null);
+  const fam = hit ? hit[3] : null, fb = { cosa: '', dove: '' };
+  const o = { name: name || 'Articolo', code: fmtCode(r.c), page: r.p, fam: hit ? hit[0] : '', known: !!fam };
+  o.cosa = (fam || fb).cosa; o.dove = (fam || fb).dove || '';
+  o.quanto = fam && fam.quanto || ''; o.uso = fam && fam.uso || '';
+  o.altri = fam && fam.altri || ''; o.manut = fam && fam.manut || '';
+  o.sapere = fam && fam.sapere ? fam.sapere.slice() : [];
+  o.desc = (b.d || '').replace(/\s+/g, ' ').trim();
+  o.questo = r.f.filter(([k, v]) => v && !SKIP_COL.test(k)).map(([k, v]) => cap(low(k)) + ': ' + v);
+  o.dati = [];
+  for (const [re, lab] of DATI) {
+    const m = o.desc.match(re); if (!m || o.dati.some(x => x.startsWith(lab))) continue;
+    const v = m[0].trim().replace(new RegExp('^' + lab + '\\s*:?\\s*', 'i'), '').replace(/^(teorica|di)\s+/i, '');
+    o.dati.push(lab + ': ' + cap(v));
+  }
+  // Coverage of this very tin, when the catalogue gives both the yield and the size: plain arithmetic.
+  const mRes = o.desc.match(/([\d.,]+)\s*(?:m2|m²|mq)\s*\/?\s*(?:per\s*)?(?:l\b|lt\b|litro)/i);
+  const mConf = (r.f.find(([k]) => /confezione|conf\./i.test(k)) || [])[1] || '';
+  const mLt = String(mConf).match(/([\d.,]+)\s*(?:lt|l\b|litri)/i);
+  if (mRes && mLt) {
+    const res = parseFloat(mRes[1].replace(',', '.')), lt = parseFloat(mLt[1].replace(',', '.'));
+    if (res > 0 && lt > 0) o.resa = 'Con questa confezione da ' + mLt[1] + ' litri si coprono circa ' + Math.round(res * lt) + ' m² per mano (resa teorica del produttore: ' + mRes[1] + ' m² al litro). Con due mani circa ' + Math.round(res * lt / 2) + ' m².';
+  }
+  const ROW = r.f.map(([k, v]) => v).join(' ').toUpperCase();
+  const pr = PROD.find(([re, , rx]) => re.test(NAME) && (!rx || rx.test(ROW)));
+  if (pr) { o.verif = pr[1].dati; o.fonte = pr[1].fonte; o.scheda = pr[1].url || ''; }
+  if (!o.scheda) { const sc = SCHEDE.find(([re, rx]) => re.test(NAME) && (!rx || rx.test(ROW))); o.scheda = sc ? sc[2] : ''; }
+  o.scheda = o.scheda || '';
+  o.mats = []; for (const [re, t] of MATS) { if (!o.mats.length && re.test(NAME)) o.mats.push(t); }
+  const sib = INDEX.rows.filter(x => x.b === r.b && r.b >= 0);
+  o.varianti = sib.length;
+  o.variantiCol = (b.h || []).filter((h, k) => k > 0 && !SKIP_COL.test(h)).join(', ');
+  return o;
+}
+
+function sections(e) {
+  const S = [];
+  if (e.cosa || e.desc) S.push(['A cosa serve', 'p', esc(e.cosa) + (e.desc ? (e.cosa ? ' <span class="vq">' : '<span class="vq" style="margin-top:0">') + 'Dal catalogo: «' + esc(e.desc) + '»</span>' : ''), 'info', 1]);
+  if (e.verif) S.push(['Dati del produttore', 'ul', e.verif.concat(['Fonte: ' + e.fonte + '.']), 'shield']);
+  if (e.dove) S.push(['Dove si usa', 'p', e.dove, 'pin']);
+  if (e.resa) S.push(['Quanto ne serve', 'p', e.resa, 'calc']);
+  else if (e.quanto) S.push(['Quanto ne serve', 'p', e.quanto, 'calc']);
+  if (e.uso) S.push(['Come si monta o si usa', 'p', e.uso, 'tool']);
+  if (e.altri) S.push(['Altri usi', 'p', e.altri, 'plus']);
+  if (e.mats.length) S.push(['Materiale e tenuta in mare', 'ul', e.mats, 'shield']);
+  if (e.manut) S.push(['Manutenzione e controlli', 'p', e.manut, 'clock']);
+  const q = e.questo.concat(e.dati);
+  if (q.length) S.push(['Questo codice: ' + e.code, 'ul', q, 'tag']);
+  if (e.varianti > 1) S.push(['Varianti', 'p', 'Di questo articolo ci sono ' + e.varianti + ' versioni' + (e.variantiCol ? ', che cambiano per ' + low(e.variantiCol) : '') + '. Le trovi nella pagina dell\'articolo, sotto «Varianti dello stesso articolo».', 'grid']);
+  if (e.sapere.length) S.push(['Buono a sapersi', 'ul', e.sapere, 'chat']);
+  if (!e.known) S.push(['Informazioni', 'p', 'Per questo articolo non ci sono abbastanza informazioni certe oltre a quelle del catalogo. Qui sopra trovi solo i dati del catalogo stesso.', 'info']);
+  return S;
+}
+
+const ICO = {
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/>',
+  pin: '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
+  tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.7-3.7a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.7 3.7z"/>',
+  plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  shield: '<path d="M12 3l7 3v5.5c0 4.3-3 8.2-7 9.5-4-1.3-7-5.2-7-9.5V6z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="8" cy="8" r="1.2"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/>',
+};
+const DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h7"/></svg>';
+const CSS = `
+.tds-sheet .tds-save { margin-left: auto; }
+.tds-sheet .tds-save + .x { margin-left: 8px; }
+.tds-pages { display: grid; gap: 10px; }
+.tds-pages canvas { display: block; background: #fff; border-radius: 6px; box-shadow: var(--card-shadow); }
+.tds-msg { font-size: 15px; color: var(--muted); text-align: center; margin: 30px 0; line-height: 1.6; }
+.tds-msg .chipbtn { margin-top: 10px; }
+.info-btn { display: inline-flex; align-items: center; gap: 6px; }
+.info-btn svg.sail { width: 17px; height: 17px; }
+.vela-sheet { position: fixed; inset: 0; z-index: 40; background: var(--page); overflow-y: auto; animation: slide .22s cubic-bezier(.2,.8,.2,1); padding-top: env(safe-area-inset-top, 0px); }
+.vela-sheet .vwrap { max-width: 760px; margin: 0 auto; padding: 0 16px calc(26px + env(safe-area-inset-bottom, 0px)); }
+.vela-top { position: sticky; top: 0; z-index: 2; background: var(--glass, rgba(255,255,255,.93)); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); margin: 0 -16px 14px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+.vela-ava { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: #fff; }
+.vela-ava svg { width: 23px; height: 23px; }
+.vela-top b { font-size: 17px; line-height: 1.15; } .vela-top small { display: block; font-weight: 500; color: var(--muted); font-size: 12.5px; }
+.vela-top .x { margin-left: auto; border: 0; background: var(--soft); color: var(--ink); width: 36px; height: 36px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+.vela-sec { display: grid; gap: 12px; }
+.vela-card { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 13px 16px; box-shadow: var(--card-shadow); }
+.vela-card h4 { margin: 0 0 7px; font-size: 12.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--blue); display: flex; align-items: center; gap: 7px; }
+.vela-card h4 svg { width: 17px; height: 17px; flex: none; }
+.vela-card p, .vela-card li { font-size: 15.5px; line-height: 1.55; margin: 0; color: var(--ink); }
+.vela-card ul { margin: 0; padding-left: 19px; display: grid; gap: 6px; }
+.vela-card .vq { display: block; margin-top: 9px; padding-left: 11px; border-left: 3px solid var(--blue); color: var(--ink-2); font-size: 14.5px; }
+.vela-note { margin-top: 14px; font-size: 11.5px; line-height: 1.45; color: var(--muted); text-align: center; }
+`;
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }));
+const ico = k => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICO[k] + '</svg>';
+
+function cards(e) {
+  return sections(e).map(([t, kind, body, k, raw]) => '<div class="vela-card"><h4>' + ico(k) + esc(t) + '</h4>'
+    + (kind === 'ul' ? '<ul>' + body.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '<p>' + (raw ? body : esc(body)) + '</p>') + '</div>').join('');
+}
+
+function open(i) {
+  const e = explain(i);
+  const s = document.createElement('div'); s.className = 'vela-sheet';
+  s.innerHTML = '<div class="vwrap"><div class="vela-top"><span class="vela-ava">' + SAIL + '</span><b>Più info<small>' + esc(e.name) + ' · ' + esc(e.code) + '</small></b><button class="x" type="button" aria-label="Chiudi">✕</button></div>'
+    + '<div class="vela-sec">' + cards(e) + '</div>'
+    + '<p class="vela-note">Informazioni generali generate automaticamente dall\'app. Misure, dati tecnici, tempi e valori esatti vanno sempre verificati sulla pagina ' + e.page + ' del catalogo e sulla scheda tecnica del produttore.</p></div>';
+  document.body.appendChild(s);
+  const close = () => { s.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(ev) { if (ev.key === 'Escape') close(); }
+  s.querySelector('.x').onclick = close;
+  document.addEventListener('keydown', onKey);
+}
+
+function mount(i) {
+  const art = document.getElementById('art'); if (!art || !INDEX.rows[i] || INDEX.example) return;
+  const fav = art.querySelector('#favBtn'); if (!fav || art.querySelector('#infoBtn')) return;
+  fav.insertAdjacentHTML('afterend', '<button class="chipbtn info-btn" type="button" id="infoBtn"><svg class="sail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5v15H4.5z" fill="currentColor" fill-opacity=".25"/><path d="M13 5.5l6 12h-6z" fill="currentColor" fill-opacity=".25"/><path d="M3 19.5h18l-2.2 2.5H5.2z"/></svg>Più info</button>');
+  art.querySelector('#infoBtn').onclick = () => open(i);
+  // Official producer data sheet, only where a verified link exists: shown inside the app (copy kept on this edition's site).
+  const e = explain(i), url = e.scheda, A = window.BattagliApp;
+  if (!url) return;
+  // a link that can only open outside the app is hidden on the Android builds that cannot open links
+  if (!isPdf(url) || NO_COPY.has(schName(url))) return;  // only sheets copied on our site: nothing opens outside the app
+  art.querySelector('#infoBtn').insertAdjacentHTML('afterend', '<button class="chipbtn info-btn" type="button" id="tdsBtn"><svg class="sail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z" fill="currentColor" fill-opacity=".15"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h7"/></svg>Scheda tecnica</button>');
+  art.querySelector('#tdsBtn').onclick = () => openSheet(url, e.name, e.code);
+}
+
+// Search also in the verified data-sheet texts (Più info), with a lower weight than the catalogue's own words.
+// Sentences that say what a product must NOT be used for are left out, so "antivegetativa alluminio" never finds one that forbids it.
+// Built when first needed (or when the phone is idle), so opening the app never waits for it.
+let XV = new Map(), XSTEM = new Map(), XORD = new Map(), xvReady = false;
+function buildExtra() {
+  xvReady = true; XV = new Map(); XSTEM = new Map(); XORD = new Map(); if (typeof INDEX === 'undefined' || !INDEX || !INDEX.rows || INDEX.example) return;
+  INDEX.rows.forEach((r, i) => {
+    const b = INDEX.blocks[r.b] || {}, NAME = (b.t || '').trim().toUpperCase(), ROW = r.f.map(([k, v]) => v).join(' ').toUpperCase();
+    const pr = PROD.find(([re, , rx]) => re.test(NAME) && (!rx || rx.test(ROW))); if (!pr) return;
+    const txt = pr[1].dati.filter(x => !/\b(non|mai|evitare|esclus|vietat|tranne|eccetto|senza)\b/i.test(x)).join(' ');
+    for (const w of new Set(words(normText(txt)))) {
+      if (/^\d/.test(w) || w.length < 4 || STOP.has(w)) continue;
+      let a = XV.get(w); if (!a) XV.set(w, a = []); a.push(i);
+    }
+  });
+  // stem -> words, so a search looks up its words instead of reading the whole list
+  for (const w of XV.keys()) { XORD.set(w, XORD.size); if (w.length < 5) continue; const st = stem(w); let a = XSTEM.get(st); if (!a) XSTEM.set(st, a = []); a.push(w); }
+}
+// Crossing the two sources: a data-sheet word only helps when the query has two or more words and the article
+// also matches at least one of them in the catalogue. The catalogue's own results keep their order and come first.
+let xOn = false, catRows = null;
+const baseMatch = window.matchWord;
+if (typeof baseMatch === 'function') window.matchWord = function (t) {
+  const out = baseMatch(t);
+  if (!xOn) return out;
+  for (const r of out.keys()) catRows.add(r);
+  if (!XV.size || /^\d/.test(t) || t.length < 4) return out;
+  const forms = (typeof SYNMAP !== 'undefined' && SYNMAP.get(t)) || [t];
+  for (const f of forms) {
+    const fs = f.length >= 5 ? stem(f) : null;
+    const ws = new Set(fs ? XSTEM.get(fs) || [] : []); if (XV.has(f)) ws.add(f);
+    for (const w of [...ws].sort((a, b) => XORD.get(a) - XORD.get(b))) for (const r of XV.get(w)) if (!out.has(r)) out.set(r, .5);
+  }
+  return out;
+};
+const baseSearch = window.search;
+if (typeof baseSearch === 'function' && typeof baseMatch === 'function') window.search = function (q, qd) {
+  const base = baseSearch(q, qd);
+  if (base.mode !== 'text' && base.mode !== 'none') return base;
+  if (!xvReady) buildExtraSafe();
+  if (!XV.size) return base;
+  const nw = words(normText(((qd || '') + ' ' + (/[a-z]/i.test(q || '') ? q : '')).trim())).filter(t => !STOP.has(t) && !/^\d/.test(t) && t.length >= 4).length;
+  if (nw < 2) return base;
+  let ext; xOn = true; catRows = new Set();
+  try { ext = baseSearch(q, qd); } finally { xOn = false; }
+  const crossed = ext.list.filter(r => catRows.has(r));
+  if (base.list.length && !base.partial) {
+    const have = new Set(base.list), add = ext.partial ? [] : crossed.filter(r => !have.has(r));
+    return add.length ? Object.assign({}, base, { list: base.list.concat(add) }) : base;
+  }
+  // the catalogue alone found nothing with every word: the crossed result is the better answer when it is complete
+  return !ext.partial && crossed.length ? Object.assign({}, ext, { list: crossed, uniq: crossed.includes(ext.uniq) ? ext.uniq : -1 }) : base;
+};
+const origSet = window.setIndex;
+if (typeof origSet === 'function') window.setIndex = function () { XV = new Map(); xvReady = false; const r = origSet.apply(this, arguments); idleExtra(); return r; };
+function buildExtraSafe() { try { buildExtra(); } catch (err) { XV = new Map(); console.warn('info search', err); } }
+let xvTimer = 0;
+function idleExtra() { clearTimeout(xvTimer); xvTimer = setTimeout(() => { if (!xvReady) (window.requestIdleCallback || (f => f()))(() => { if (!xvReady) buildExtraSafe(); }); }, 1500); }
+idleExtra();
+
+// ---- "Scheda tecnica" reader -------------------------------------------------------------
+// The producers' PDFs are copied on this edition's own site (schede/<name>.pdf), because their sites do not let
+// another app show them. First opening downloads it, then it stays on the device. pdf.js draws the pages.
+// previews (…/prova/vN/) read the copies of the site they are on
+const SCH_BASE = (/\/prova\/v\d+\//.test(location.href) ? location.href.split('/prova/')[0] + '/' : typeof SITE_CAT === 'string' ? SITE_CAT.replace(/catalog\/?$/, '') : '') + 'schede/';
+const schName = u => { let x = 0x811c9dc5; for (let k = 0; k < u.length; k++) { x ^= u.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16).padStart(8, '0'); };
+// sheets the copy job could not fetch (producer site refused it): opened on the producer's site instead
+const NO_COPY = new Set(['8dc979fc']);
+const isPdf = u => /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS/i.test(u);
+let schDb = null;
+function db() {
+  if (schDb) return schDb;
+  schDb = new Promise((ok, ko) => { try { const r = indexedDB.open('battagli-schede', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); } catch (err) { ko(err); } });
+  return schDb;
+}
+async function dbGet(k) { try { const d = await db(); return await new Promise(ok => { const q = d.transaction('f').objectStore('f').get(k); q.onsuccess = () => ok(q.result); q.onerror = () => ok(undefined); }); } catch (err) { return undefined; } }
+async function dbPut(k, v) { try { const d = await db(); d.transaction('f', 'readwrite').objectStore('f').put(v, k); } catch (err) { /* only a cache */ } }
+// Saved sheets use at most 30 MB on the device: past that, the ones opened least recently are removed.
+const SCH_MAX = 300 * 1024 * 1024;  // all the sheets fit (about 70 MB): they are all kept on the device
+async function touch(key, size) {
+  if (!key.startsWith('pdf:')) return;
+  const m = (await dbGet('meta')) || {}; m[key] = { s: size || (m[key] || {}).s || 0, t: Date.now() };
+  let tot = Object.values(m).reduce((n, x) => n + x.s, 0);
+  for (const k of Object.keys(m).sort((a, b) => m[a].t - m[b].t)) {
+    if (tot <= SCH_MAX || k === key) continue;
+    tot -= m[k].s; delete m[k];
+    try { const d = await db(); d.transaction('f', 'readwrite').objectStore('f').delete(k); } catch (err) { /* only a cache */ }
+  }
+  dbPut('meta', m);
+}
+// the PC program carries the sheets inside (schede/ next to the page): read from there, nothing to download
+const SCH_PREVIEW = /\/prova\/v\d+\//.test(location.href);
+let schLocal = null;
+function hasLocal() { if (!schLocal) schLocal = SCH_PREVIEW || location.protocol === 'https:' ? Promise.resolve(false) : fetch('schede/pdfjs/pdf.min.js', { method: 'HEAD' }).then(r => r.ok, () => false); return schLocal; }
+async function cached(key, url, type) {
+  if (url.startsWith(SCH_BASE) && await hasLocal()) { try { const r = await fetch('schede/' + url.slice(SCH_BASE.length)); if (r.ok) { const b = await r.blob(); return b.type === type ? b : new Blob([b], { type }); } } catch (e) {} }
+  let b = await dbGet(key); if (b) { touch(key).catch(() => {}); return b; }
+  const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) throw new Error('http ' + r.status);
+  b = await r.blob(); b = b.type === type ? b : new Blob([b], { type });
+  if (type === 'application/pdf' && !/^%PDF/.test(await b.slice(0, 5).text())) throw new Error('not a pdf');
+  dbPut(key, b); touch(key, b.size).catch(() => {}); return b;
+}
+let pdfLib = null;
+function loadPdfJs() {
+  if (pdfLib) return pdfLib;
+  pdfLib = (async () => {
+    // the app already has the same pdf.js (3.11.174) for the catalogue: use it, nothing to download
+    if (typeof getPdfjs === 'function') { try { const lib = await getPdfjs(); if (lib && /^3\.11\./.test(lib.version || '')) return lib; } catch (e) {} }
+    const js = await cached('pdfjs:3.11.174', SCH_BASE + 'pdfjs/pdf.min.js', 'text/javascript');
+    const wk = await cached('pdfjs-worker:3.11.174', SCH_BASE + 'pdfjs/pdf.worker.min.js', 'text/javascript');
+    await new Promise((ok, ko) => { const sc = document.createElement('script'); sc.src = URL.createObjectURL(js); sc.onload = ok; sc.onerror = ko; document.head.appendChild(sc); });
+    const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(wk); return lib;
+  })();
+  pdfLib.catch(() => { pdfLib = null; });
+  return pdfLib;
+}
+async function openSheet(url, name, code) {
+  if (!isPdf(url) || NO_COPY.has(schName(url))) return;
+  const A = window.BattagliApp, canSave = !A || typeof A.savePdf === 'function';
+  const s = document.createElement('div'); s.className = 'vela-sheet tds-sheet';
+  s.innerHTML = '<div class="vwrap"><div class="vela-top"><span class="vela-ava">' + DOC + '</span><b>Scheda tecnica<small>' + esc(name) + ' · ' + esc(code) + '</small></b>'
+    + (canSave ? '<button class="chipbtn tds-save" type="button" hidden>Scarica</button>' : '') + '<button class="x" type="button" aria-label="Chiudi">✕</button></div>'
+    + '<p class="tds-msg">Apro la scheda ufficiale del produttore…</p><div class="tds-pages"></div>'
+    + '<p class="vela-note">Scheda tecnica ufficiale del produttore, copiata così com\'è. Fa fede l\'ultima versione sul sito del produttore.</p></div>';
+  document.body.appendChild(s);
+  let gone = false;
+  const close = () => { gone = true; s.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(ev) { if (ev.key === 'Escape') close(); }
+  s.querySelector('.x').onclick = close; document.addEventListener('keydown', onKey);
+  const msg = s.querySelector('.tds-msg'), box = s.querySelector('.tds-pages');
+  const fail = () => {
+    if (gone) return;
+    msg.textContent = 'Non riesco ad aprirla adesso: la prima volta serve internet. Riprova quando sei connesso.';
+  };
+  try {
+    const nm = schName(url), [blob, lib] = await Promise.all([cached('pdf:' + nm, SCH_BASE + nm + '.pdf', 'application/pdf'), loadPdfJs()]);
+    if (gone) return;
+    const save = s.querySelector('.tds-save');
+    if (save) { save.hidden = false; save.onclick = () => {
+      const fn = (name || 'scheda').replace(/[^\w.-]+/g, '-').slice(0, 60) + '.pdf';
+      // Android app: saved in Download/Battagli by the app itself, nothing opens outside
+      if (A) { const rd = new FileReader(); rd.onload = () => { let ok = false; try { ok = A.savePdf(fn, String(rd.result).split(',')[1]); } catch (e) {}
+        try { toast(ok ? 'Scheda salvata in Download/Battagli' : 'Non riesco a salvarla su questo telefono'); } catch (e) {} }; rd.readAsDataURL(blob); return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fn;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    }; }
+    const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    msg.remove();
+    const w = Math.min(box.clientWidth || 700, 900), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    for (let p = 1; p <= doc.numPages && !gone; p++) {
+      const pg = await doc.getPage(p), v0 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: w / v0.width * dpr });
+      const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; c.style.width = '100%';
+      box.appendChild(c); await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (err) { console.warn('scheda', err); fail(); }
+}
+// First start: all the official sheets are copied on the device in the background, once, without asking;
+// after that every "Scheda tecnica" opens at once, also without internet. Stops quietly if offline and goes on next time.
+let fetchingAll = false;
+async function fetchAllSheets() {
+  if (fetchingAll || await hasLocal()) return; fetchingAll = true;
+  try {
+    const urls = new Set();
+    for (const [, v] of PROD) if (v && v.url) urls.add(v.url);
+    for (const x of SCHEDE) urls.add(x[2]);
+    for (const u of urls) {
+      if (!isPdf(u) || NO_COPY.has(schName(u))) continue;
+      const nm = schName(u); if (await dbGet('pdf:' + nm)) continue;
+      try { await cached('pdf:' + nm, SCH_BASE + nm + '.pdf', 'application/pdf'); } catch (e) { if (!navigator.onLine) break; }
+      await new Promise(r => setTimeout(r, 150));
+    }
+  } finally { fetchingAll = false; }
+}
+setTimeout(() => (window.requestIdleCallback || (f => f()))(() => { fetchAllSheets().catch(() => {}); }), 8000);
+window.VelaInfo = { explain, sections, open, mount, openSheet };
+const orig = window.openRow;
+window.openRow = function (i) { const r = orig.apply(this, arguments); try { mount(i); } catch (err) { console.warn('info', err); } return r; };
+})();
+
+</script></body></html>
