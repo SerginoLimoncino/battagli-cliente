@@ -1,13 +1,15 @@
-CATALOGO BATTAGLI - VERSIONE iPHONE / iPAD
+CATALOGO BATTAGLI - versione 2.0
 
-Qui c'è SOLO l'app: niente catalogo, niente account, nessun dato personale.
-Il PDF del catalogo lo carica ogni collega sul proprio telefono e resta solo lì.
-
-INDIRIZZO
+INDIRIZZO (iPhone / iPad)
 https://serginolimoncino.github.io/battagli-cliente/
 
 SULL'iPHONE
 1. Apri l'indirizzo con Safari.
 2. Tasto Condividi (quadrato con freccia) > "Aggiungi alla schermata Home".
-3. Apri l'app dall'icona Battagli > Impostazioni > Carica PDF > scegli il catalogo salvato in "File".
+3. Apri l'app dall'icona Battagli: il catalogo 10-04-2026 si carica da solo
+   la prima volta (serve internet per qualche minuto).
 4. Da quel momento funziona anche senza internet.
+
+ANDROID E PC
+app/Battagli-Marine-Hardware.apk e app/Battagli-PC-Windows.zip:
+alla prima apertura scaricano il catalogo da qui.

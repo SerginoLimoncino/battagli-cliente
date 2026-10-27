@@ -1,5 +1,5 @@
 <!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
-/* Numeri utili: edit mode */
+/* list edit mode */
 .numedit { margin-top: 2px; }
 .numedit[aria-pressed="true"] { background: var(--ok); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
 #numMain.editing .numrow { cursor: pointer; }
@@ -32,9 +32,51 @@
 .favbtn[aria-pressed="true"] svg { fill: #f2b705; stroke: #d29a00; }
 #favList .rrow .star { width: 16px; height: 16px; fill: #f2b705; stroke: #d29a00; opacity: 1; }
 
-/* Customer edition: no photo search, no phone numbers, no app sharing */
-#tabCam, #tabNumbers, #photoRow, #camBtn, #shareSec, #viewNumbers { display: none !important; }
-.tabbar .in { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; max-width: 520px !important; }
+/* Customer edition: no phone numbers (they are internal) */
+#tabNumbers, #viewNumbers { display: none !important; }
+.tabbar .in { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; max-width: 560px !important; }
+
+/* new catalogue check */
+.catdlg { max-height: 86vh; overflow: auto; }
+.catdlg table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 14.5px; }
+.catdlg th, .catdlg td { text-align: right; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.catdlg th:first-child, .catdlg td:first-child { text-align: left; color: var(--muted); font-weight: 600; }
+.catdlg .catok { color: #15803d; font-weight: 700; margin: 6px 0; }
+.catdlg .catwarn { background: rgba(217, 119, 6, .12); color: #b45309; border-radius: 12px; padding: 10px 12px; margin: 6px 0; font-weight: 600; font-size: 14px; }
+.catdlg .catwarn li { margin: 2px 0 2px 16px; }
+.catbtns { flex-wrap: wrap; }
+.catbtns .btn { flex: 1 1 140px; }
+
+/* Preferiti: one row on the home, own page with the list */
+.favopen { display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: transparent; text-align: left; color: var(--ink); font: inherit; cursor: pointer; }
+.favopen .fstar { width: 40px; height: 40px; border-radius: 12px; background: #fff4d6; display: grid; place-items: center; }
+.favopen .fstar svg { width: 22px; height: 22px; fill: #f2b705; stroke: #d29a00; }
+.favopen b { display: block; font-size: 16px; font-weight: 800; }
+.favopen small { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.favopen > svg { width: 18px; height: 18px; color: var(--muted); }
+.favopen:active { background: var(--blue-soft); }
+#favSheet { z-index: 16; }
+#favPage .frep { margin: 18px 4px 8px; font-size: 14px; font-weight: 800; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+#favPage .frep i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+#favPage .fitem { display: grid; grid-template-columns: minmax(0, 1fr) 52px; align-items: stretch; background: var(--bg); border-radius: 16px; box-shadow: var(--card-shadow); margin-bottom: 10px; overflow: hidden; }
+#favPage .fitem .fam { border: 0; border-radius: 0; box-shadow: none; margin: 0; background: transparent; }
+#favPage .fitem .fam .s .pr { color: var(--ink); font-weight: 700; margin-left: 6px; }
+#favPage .favx { border: 0; border-left: 1px solid var(--line); background: transparent; display: grid; place-items: center; cursor: pointer; }
+#favPage .favx svg { width: 22px; height: 22px; fill: #f2b705; stroke: #d29a00; }
+@media (min-width: 900px) { #favPage .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; } }
+
+/* share: three buttons, Android / iPhone / PC Windows */
+.shareops { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+#sharePc { grid-column: 1 / -1; justify-self: center; width: calc(50% - 6px); }
+.shareops .btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 !important; }
+.shareops .btn svg { width: 22px; height: 22px; flex: none; }
+.shareops .btn { white-space: nowrap; }
+#iosBox { display: none !important; }
+/* share links */
+.sharelinks .slink { display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
+.sharelinks .slink b { font-size: 14px; }
+.sharelinks .slink input { min-width: 0; font: inherit; font-size: 13px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); }
+.sharelinks .slink .btn { width: auto; padding: 9px 14px; font-size: 14px; background: var(--soft); color: var(--ink); }
 
 /* update banner */
 .updbar { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top, 0px) + 10px); z-index: 80; display: flex; align-items: center; gap: 10px; max-width: 560px; margin: 0 auto; padding: 12px 12px 12px 16px; border-radius: 18px; background: var(--bg); color: var(--ink); box-shadow: 0 10px 30px rgba(var(--shadow-rgb, 15, 23, 42), .25), 0 0 0 1.5px var(--blue); }
@@ -523,8 +565,8 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
 <div class="view" id="viewNumbers" hidden>
 <header class="hero">
   <div class="wrap">
-    <h1>Numeri utili</h1>
-    <p class="lead">Numeri interni di telefono.</p>
+    <h1></h1>
+    <p class="lead"></p>
     <button class="load-pill numedit" type="button" id="numEdit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Modifica</span></button>
   </div>
 </header>
@@ -539,8 +581,8 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
   </div>
 </header>
 <main class="wrap">
-  <section><div class="block-h"><h2>Catalogo PDF</h2></div><button class="btn primary" type="button" data-goto="catalog">Aggiorna catalogo</button><p class="note" style="margin-top:8px">Quando esce un nuovo catalogo, caricalo qui: l'app rilegge tutto da sola (codici, foto, pagine) e sostituisce il vecchio.</p></section>
-  <section id="shareSec" hidden><div class="block-h"><h2>Condividi l'app</h2></div><div class="shareops"><button class="btn primary" type="button" id="shareAndroid"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.87 3.22A11.4 11.4 0 0 0 12 8.15c-1.77 0-3.43.39-4.91 1L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>Android</button><button class="btn primary" type="button" id="shareIos"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.3-3.52zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.07 1.96-.49 2.56-1.21z"/></svg>iPhone</button></div><div id="iosBox" hidden><div class="ioslink"><input id="iosUrl" readonly aria-label="Link per iPhone"><button class="btn primary" type="button" id="iosCopy">Copia</button></div><p class="note" style="margin-top:6px">Su iPhone: apri il link con Safari, poi Condividi → Aggiungi alla schermata Home.</p></div><p class="note" style="margin-top:8px">Invia l'app con il catalogo aggiornato.</p></section>
+  <section><div class="block-h"><h2>Catalogo PDF</h2></div><button class="btn primary" type="button" data-goto="catalog" style="display:flex;align-items:center;justify-content:center;gap:10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:22px;height:22px;flex:none"><path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5"/><text x="12" y="17.6" text-anchor="middle" font-size="6.2" font-weight="800" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">PDF</text></svg>Aggiorna catalogo</button><button class="btn" type="button" id="catBack" hidden style="margin-top:10px;background:var(--soft);color:var(--ink)">Torna al catalogo precedente</button><p class="note" style="margin-top:8px">Quando esce un nuovo catalogo, caricalo qui: l'app rilegge tutto da sola (codici, foto, pagine) e sostituisce il vecchio.</p></section>
+  <section id="shareSec" hidden><div class="block-h"><h2>Condividi l'app</h2></div><div class="shareops"><button class="btn primary" type="button" id="shareAndroid"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.87 3.22A11.4 11.4 0 0 0 12 8.15c-1.77 0-3.43.39-4.91 1L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>Android</button><button class="btn primary" type="button" id="shareIos"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.3-3.52zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.07 1.96-.49 2.56-1.21z"/></svg>iPhone</button><button class="btn primary" type="button" id="sharePc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.6"/><path d="M8 20.5h8M12 16.5v4"/></svg>PC</button></div><div id="iosBox" hidden><div class="ioslink"><input id="iosUrl" readonly aria-label="Link per iPhone"><button class="btn primary" type="button" id="iosCopy">Copia</button></div><p class="note" style="margin-top:6px">Su iPhone: apri il link con Safari, poi Condividi → Aggiungi alla schermata Home.</p></div><p class="note" style="margin-top:8px">Invia l'app con il catalogo aggiornato.</p><div id="shareLinks" hidden></div></section>
   <section><div class="block-h"><h2>Tema colore</h2></div><div class="themes"><button class="theme" type="button" data-theme="chiaro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0a5cc2 45% 100%)"></i><span>Chiaro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="scuro" aria-pressed="false"><i style="background:linear-gradient(135deg,#1b2433 0 45%,#3b82f6 45% 100%)"></i><span>Scuro<small>Scuro</small></span></button><button class="theme" type="button" data-theme="carbon" aria-pressed="false"><i style="background:linear-gradient(135deg,#1d1d20 0 45%,#ff5a36 45% 100%)"></i><span>Carbon<small>Scuro</small></span></button><button class="theme" type="button" data-theme="viola" aria-pressed="false"><i style="background:linear-gradient(135deg,#241b3a 0 45%,#8b5cf6 45% 100%)"></i><span>Viola<small>Scuro</small></span></button><button class="theme" type="button" data-theme="azzurro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0891b2 45% 100%)"></i><span>Azzurro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="arancio" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#d9730d 45% 100%)"></i><span>Tramonto<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="verde" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#15803d 45% 100%)"></i><span>Verde<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="rosso" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#c62833 45% 100%)"></i><span>Rosso<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="oceano" aria-pressed="false"><i style="background:linear-gradient(135deg,#10282b 0 45%,#14b8a6 45% 100%)"></i><span>Oceano<small>Scuro</small></span></button><button class="theme" type="button" data-theme="notte" aria-pressed="false"><i style="background:linear-gradient(135deg,#000000 0 45%,#0ea5e9 45% 100%)"></i><span>Notte<small>Nero totale</small></span></button><button class="theme" type="button" data-theme="verdenero" aria-pressed="false"><i style="background:linear-gradient(135deg,#050806 0 45%,#22c55e 45% 100%)"></i><span>Verde e nero<small>Scuro</small></span></button><button class="theme" type="button" data-theme="rosa" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#db2777 45% 100%)"></i><span>Rosa<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="lavanda" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#7c3aed 45% 100%)"></i><span>Lavanda<small>Chiaro</small></span></button></div></section>
   <section><div class="block-h"><h2>Ricerca da foto</h2></div><div class="credit" style="text-align:left"><p class="visnote" id="visSetting" style="margin:0">Non attiva</p><div class="visbar" style="margin-top:10px"><i id="visSetBar"></i></div></div></section>
   <section id="updSec"><div class="block-h"><h2>Aggiornamenti</h2><span id="appVer"></span></div><button class="btn primary" type="button" id="updCheck">Controlla aggiornamenti</button><p class="note" id="updNote" style="margin-top:8px">Si aggiorna solo l'app (funzioni e ricerca), non il catalogo: il catalogo nuovo arriva in PDF e si carica con "Aggiorna catalogo". Quando c'è una versione nuova compare in alto il pulsante "Aggiorna". Catalogo, preferiti, numeri e impostazioni restano salvati.</p></section>
@@ -556,6 +598,14 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
     <label class="bfield"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="browseQ" type="text" placeholder="Filtra in questo reparto…" autocomplete="off" spellcheck="false"></label>
   </div></div>
   <div class="wrap" style="padding-top:14px"><div class="list" id="browseList"></div><div id="browseMore"></div></div>
+</div>
+<div class="browse" id="favSheet" hidden role="dialog" aria-label="Preferiti">
+  <div class="bhead"><div class="wrap">
+    <div class="brow"><button class="backbtn" id="favClose" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Catalogo</button><h2>Preferiti</h2></div>
+    <p class="bsub" id="favSub"></p>
+    <label class="bfield"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="favQ" type="text" placeholder="Filtra nei preferiti…" autocomplete="off" spellcheck="false"></label>
+  </div></div>
+  <div class="wrap" style="padding-top:6px" id="favPage"></div>
 </div>
 <div class="cmpbar" id="cmpBar" hidden><b id="cmpCount"></b><button class="clr" id="cmpClear" type="button">Svuota</button><button class="go" id="cmpOpen" type="button">Confronta</button></div>
 <div class="cmp" id="cmpSheet" hidden role="dialog" aria-label="Confronto rapido"><div class="wrap">
@@ -587,7 +637,7 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.4h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/></svg><span>Cerca foto</span>
     </button>
     <button class="tab" type="button" role="tab" id="tabNumbers" data-goto="numbers" aria-selected="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg><span>Numeri utili</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg><span></span>
     </button>
     <button class="tab" type="button" role="tab" id="tabSettings" data-goto="settings" aria-selected="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Impostazioni</span>
@@ -624,6 +674,13 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
     <div class="nbtns"><button class="btn" type="button" id="numCancel" style="background:var(--soft);color:var(--ink)">Annulla</button><button class="btn primary" type="submit">Salva</button></div>
     <button class="btn ndel" type="button" id="numDel">Elimina questo numero</button>
   </form>
+</div>
+<div class="overlay" id="catDlg" hidden>
+  <div class="dialog catdlg" role="dialog" aria-labelledby="catDlgT">
+    <h3 id="catDlgT">Controllo del catalogo nuovo</h3>
+    <div id="catDlgBody"></div>
+    <div class="nbtns catbtns"><button class="btn" type="button" id="catKeep" style="background:var(--soft);color:var(--ink)">Tieni quello di prima</button><button class="btn primary" type="button" id="catUse">Usa il catalogo nuovo</button></div>
+  </div>
 </div>
 <div class="updbar" id="updBar" hidden role="status"><div class="ut"><b>Aggiornamento disponibile</b><small id="updTxt"></small></div><button class="btn primary" type="button" id="updGo">Aggiorna</button><button class="updx" type="button" id="updLater" aria-label="Più tardi">×</button></div>
 <div class="toast" id="toast" hidden></div>
@@ -980,7 +1037,7 @@ function renderRecent() {
   renderFav();
   const known = new Set(INDEX.rows.map(r => r.c));
   const rec = lsGet('recent', []).filter(c => known.has(c)).slice(0, 5);
-  const rec8 = lsGet('recent', []).filter(c => known.has(c)).slice(0, 8);
+  const rec8 = lsGet('recent', []).filter(c => known.has(c)).slice(0, 10);
   const hist = lsGet('hist', []).slice(0, 5);
   hasRecent = !!(rec.length || hist.length);
   hasRecCodes = rec8.length > 0;
@@ -1000,7 +1057,7 @@ function pushHist(q, qd) {
   const h = lsGet('hist', []).filter(x => !(x.q === q && x.qd === qd)); h.unshift({ q, qd }); lsSet('hist', h.slice(0, 12));
 }
 function clearHist() { lsSet('hist', []); lsSet('recent', []); renderRecent(); toast('Cronologia cancellata'); }
-function pushRecent(c) { const rec = lsGet('recent', []).filter(x => x !== c); rec.unshift(c); lsSet('recent', rec.slice(0, 12)); }
+function pushRecent(c) { const rec = lsGet('recent', []).filter(x => x !== c); rec.unshift(c); lsSet('recent', rec.slice(0, 10)); }
 
 // ---------- search ----------
 const STOP = new Set(['a','ad','di','da','in','con','su','per','il','lo','la','le','i','gli','un','una','uno','e','o','del','della','dei','delle','al','alla','ai','che','forma','tipo','di','dello','degli','sul','sulla','nel','nella','mi','serve','cerco','vorrei','quello','quella','tipo','the','for','with','and','of','to','pcs','made','italy','qty','quantity']);
@@ -1582,10 +1639,21 @@ function ocrCodeWorker() {
 // Reads catalogue codes from a photo. Calls onHit(code, how) for each new code found; resolves with
 // { codes, near, text } once done. isLive() lets the caller stop the work when the photo is discarded.
 async function readCodes(cv, have, onHit, isLive) {
-  const got = [], near = new Set(); let text = '';
+  const got = [], near = new Set(), good = []; let text = '';
+  const rec = async c => {
+    const d = (await w.recognize(c, {}, { text: true, blocks: true })).data;
+    for (const b of d.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const x of l.words || []) if (x.confidence >= 70 && /[A-Za-z0-9]{2}/.test(x.text)) good.push(x.text);
+    return d.text || '';
+  };
   const take = (cands, how) => { for (const c of cands) if (have.has(c) && !got.includes(c)) { got.push(c); onHit && onHit(c, how); } };
   take((await barcodeRead(cv)).flatMap(t => codeCands(t)), 'barcode');
   if (got.length || (isLive && !isLive())) return { codes: got, near: [], text };
+  // The strong reader first: every line on the photo, handwriting too, matched against the catalogue.
+  try {
+    const pp = await ppRead(cv, have, isLive);
+    if (pp) { for (const x of pp.sure) take([x.code], x.how); return { codes: got, near: got.length ? [] : pp.near, nearCost: pp.nearCost, text: pp.text }; }
+  } catch (e) {}
+  if (isLive && !isLive()) return { codes: got, near: [], text };
   let w; try { w = await ocrCodeWorker(); } catch (e) { return { codes: got, near: [], text }; }
   const boxes = findLabels(cv), tries = [];
   // Each label: barcode, then text at two sizes and two layouts; sideways only for the biggest ones.
@@ -1603,18 +1671,83 @@ async function readCodes(cv, have, onHit, isLive) {
     }
     const s = W / crop.width, c = document.createElement('canvas'); c.width = W; c.height = Math.max(8, Math.round(crop.height * s));
     const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(crop, 0, 0, c.width, c.height);
-    let t = ''; try { await w.setParameters({ tessedit_pageseg_mode: psm }); t = (await w.recognize(c)).data.text || ''; } catch (e) {}
-    if (turn === 0 && W === 500 && psm === '11') text += t + '\n';
+    let t = ''; try { await w.setParameters({ tessedit_pageseg_mode: psm }); t = (await rec(c)) || ''; } catch (e) {}
+    if (psm === '11') text += t + '\n';
     const cands = codeCands(t); take(cands, 'testo');
     for (const c2 of cands) if (!have.has(c2)) near.add(c2);
     if (got.length) break;
   }
   if (!got.length && (!isLive || isLive())) {
-    // Last try: the whole photo, in case the code is printed straight on the product.
-    let t = ''; try { await w.setParameters({ tessedit_pageseg_mode: '11' }); t = (await w.recognize(cv)).data.text || ''; } catch (e) {}
-    text += t; const cands = codeCands(t); take(cands, 'testo'); for (const c of cands) if (!have.has(c)) near.add(c);
+    // Codes written by hand on the box (marker pen): digits only, whole photo, two contrasts.
+    for (const [W, mode] of [[1200, 'gray'], [1600, 'min']]) {
+      if (got.length || (isLive && !isLive())) break;
+      let t = ''; try { await w.setParameters({ tessedit_pageseg_mode: '11', tessedit_char_whitelist: '0123456789.,-' }); t = (await rec(ocrPrep(cv, W, mode, 0))) || ''; } catch (e) {}
+      const cands = codeCands(t); take(cands, 'penna'); for (const c of cands) if (!have.has(c)) near.add(c);
+    }
+    try { await w.setParameters({ tessedit_char_whitelist: '' }); } catch (e) {}
   }
-  return { codes: got, near: got.length ? [] : nearCodes([...near], have), text };
+  if (!got.length && (!isLive || isLive())) {
+    // Last try: the whole photo, in case the code is printed straight on the product.
+    let t = ''; try { await w.setParameters({ tessedit_pageseg_mode: '11' }); t = (await rec(cv)) || ''; } catch (e) {}
+    text += t; const cands = codeCands(t); take(cands, 'testo'); for (const c of cands) if (!have.has(c)) near.add(c);
+    // The whole photo with stretched contrast, then turned left and right (labels stuck sideways on the box).
+    for (const turn of [0, 1, 3]) {
+      if (got.length || (isLive && !isLive())) break;
+      let t2 = ''; try { t2 = (await rec(ocrPrep(cv, 1200, 'gray', turn))) || ''; } catch (e) {}
+      text += '\n' + t2; const c2 = codeCands(t2); take(c2, 'testo'); for (const c of c2) if (!have.has(c)) near.add(c);
+    }
+  }
+  return { codes: got, near: got.length ? [] : nearCodes([...near], have), text: good.join(' ') };
+}
+// ---------- strong reader (PP-OCR) ----------
+const PP_BASES = ['./lib/pp/', 'https://serginolimoncino.github.io/battagli-cliente/lib/pp/'];
+let ppP = null;
+function ppReady() {
+  if (ppP) return ppP;
+  ppP = (async () => {
+    for (const base of PP_BASES) {
+      try {
+        window.PP_BASE = base;
+        if (!window.PPOCR) await loadScript(base + 'pp.js');
+        await PPOCR.ready();
+        return PPOCR;
+      } catch (e) { /* next place */ }
+    }
+    throw new Error('pp');
+  })();
+  ppP.catch(() => { ppP = null; });
+  return ppP;
+}
+// { sure: [{code, how}], near: [codes], text } or null when the reader is not available.
+async function ppRead(cv, have, isLive) {
+  let P; try { P = await ppReady(); } catch (e) { return null; }
+  let lines = await P.read(cv, { isLive, maxSide: 960 });
+  if (isLive && !isLive()) return { sure: [], near: [], text: '' };
+  let res = ppJudge(P, lines, have);
+  // nothing sure: a second, finer look at the photo (small or broken-up handwriting)
+  if (!res.sure.length) {
+    lines = lines.concat(await P.read(cv, { isLive, maxSide: 1280, skip: lines }));
+    if (isLive && !isLive()) return { sure: [], near: [], text: '' };
+    res = ppJudge(P, lines, have);
+  }
+  return res;
+}
+function ppJudge(P, lines, have) {
+  const sure = [], near = [];
+  for (const m of P.matchCodes(lines, [...have], 12)) {
+    const [a, b] = m.c;
+    // read for sure: (almost) every digit clear, and clearly better than the next code
+    if (a && a.cost < 2 && (!b || b.cost - a.cost >= 0.7)) { if (!sure.some(x => x.code === a.code)) sure.push({ code: a.code, how: m.conf < 0.9 ? 'penna' : 'testo' }); continue; }
+    // otherwise the closest codes, from lines about as long as a code (not barcodes or dates)
+    if (m.n <= 9) for (const x of m.c) if (x.cost < 12) near.push(x);
+  }
+  near.sort((p, q) => p.cost - q.cost);
+  // the closest code's brothers first (same article, other size or colour: 01.0577.01, .02, .04)
+  const fam = near.length ? near[0].code.slice(0, 6) : '', lim = near.length ? near[0].cost + 6 : 0;
+  near.sort((p, q) => ((q.code.startsWith(fam) && q.cost < lim) - (p.code.startsWith(fam) && p.cost < lim)) || p.cost - q.cost);
+  const nearCodes = [...new Set(near.map(x => x.code))].filter(c => !sure.some(x => x.code === c)).slice(0, 4);
+  const text = lines.filter(l => l.conf >= 0.75 && l.text.trim().length >= 2).map(l => l.text).join('\n');
+  return { sure, near: near[0] && near[0].cost < 9 ? nearCodes : [], nearCost: near.length ? near[0].cost : 99, text };
 }
 // Catalogue codes one digit away from what was read (shown as "maybe").
 function nearCodes(cands, have) {
@@ -1623,6 +1756,24 @@ function nearCodes(cands, have) {
   return out;
 }
 
+// Photo prepared for the text reader: longest side W, turned by turn x 90 degrees, grey (or darkest channel,
+// good for coloured marker on cardboard), contrast stretched.
+function ocrPrep(src, W, mode, turn) {
+  const s = W / Math.max(src.width, src.height);
+  const rw = Math.round(src.width * s), rh = Math.round(src.height * s);
+  const c = document.createElement('canvas'); c.width = turn % 2 ? rh : rw; c.height = turn % 2 ? rw : rh;
+  const x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(turn * Math.PI / 2); x.imageSmoothingQuality = 'high'; x.drawImage(src, -rw / 2, -rh / 2, rw, rh);
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), a = d.data, n = a.length / 4, g = new Uint8Array(n), hist = new Uint32Array(256);
+  for (let i = 0; i < n; i++) { const R = a[i * 4], G = a[i * 4 + 1], B = a[i * 4 + 2]; const v = mode === 'min' ? Math.min(R, G, B) : (R * .3 + G * .59 + B * .11) | 0; g[i] = v; hist[v]++; }
+  let lo = 0, hi = 255, acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * .02) { lo = v; break; } }
+  acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n * .02) { hi = v; break; } }
+  const k = 255 / Math.max(1, hi - lo);
+  for (let i = 0; i < n; i++) { let v = (g[i] - lo) * k; v = v < 0 ? 0 : v > 255 ? 255 : v; a[i * 4] = a[i * 4 + 1] = a[i * 4 + 2] = v; }
+  x.putImageData(d, 0, 0);
+  return c;
+}
 function ocrWords(text) {
   const seen = new Set(), out = [];
   for (const w of text.split(/[^A-Za-z0-9À-ÿ\-]+/)) {
@@ -1636,18 +1787,48 @@ function ocrWords(text) {
 let codeSetAt = null, codeSetV = new Set();
 function codeSet() { if (codeSetAt !== INDEX.at) { codeSetAt = INDEX.at; codeSetV = new Set(INDEX.rows.map(r => r.c)); } return codeSetV; }
 // Articles whose description shares the most (rare) words with the text read on the photo.
+function boxToks(text) {
+  text = String(text).replace(/\b(?:q\.?ty|quantity|quantità|qta|pcs|pz|pieces|case)\s*[:.]?\s*\d+/gi, ' ')
+    .replace(/(\d)([A-Z][a-z])/g, '$1 $2').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Za-z])\.(\d)/g, '$1 $2');
+  return text.replace(/([A-Za-z]{2,})[./]+(?=[A-Za-z])/g, '$1 ').split(/\s+/).map(w => w.replace(/^[^A-Za-z0-9À-ÿ]+|[^A-Za-z0-9À-ÿ']+$/g, ''))
+    // reader slips: 0AR -> OAR, 150Z -> 150, 6RILLI -> GRILLI; supplier codes like K6501480 are not in the catalogue
+    .map(w => /[A-Za-z]{2}/.test(w) ? w.replace(/0(?=[A-Za-z])|(?<=[A-Za-z])0/g, 'O').replace(/^6(?=[A-Za-z]{3})/, 'G').replace(/(?<=[A-Za-z])6(?=[A-Za-z])/g, 'G') : w.replace(/^(\d{2,4})[A-Za-z]$/, '$1'))
+    .filter(w => !/^[A-Za-z]{0,2}\d{5,}/.test(w))
+    .filter(w => /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-./]{2,}$/.test(w) || /^\d{1,4}([.,]\d+)?'?$/.test(w) || /^[A-Za-z]{1,4}\d{1,4}[A-Za-z]?$/.test(w) || /^\d{1,4}[x×]\d{1,4}/i.test(w));
+}
+const rareWord = t => t.length >= 6 && VOCAB.has(t) && VOCAB.get(t).length < 60;
+// Articles described by what is written on the box, best first (one per article family).
 function textFind(text) {
-  const N = INDEX.rows.length, toks = [...new Set(words(normText(text)).filter(t => !STOP.has(t) && (t.length >= 4 || /^\d{3,}$/.test(t))))];
-  const score = new Map(), hits = new Map();
-  for (const t of toks) {
-    const rs = VOCAB.get(t); if (!rs || rs.length > N * 0.03) continue;
-    const w = Math.log(1 + N / rs.length);
-    for (const r of rs) { score.set(r, (score.get(r) || 0) + w); hits.set(r, (hits.get(r) || 0) + 1); }
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+  // single lines and pairs of lines (name on one line, size on the next), then everything together
+  const groups = [];
+  for (let i = 0; i < lines.length; i++) { groups.push([lines[i]]); if (i + 1 < lines.length) groups.push([lines[i], lines[i + 1]]); }
+  const strong = [];
+  for (const g of groups) {
+    const toks = boxToks(g.join(' ')); const words = toks.filter(t => /[A-Za-zÀ-ÿ]{3}/.test(t));
+    if (!words.length) continue;
+    const res = search('', toks.join(' ').slice(0, 300));
+    if (!res.list.length) continue;
+    // every word of the line found in one article: a line written about that article
+    if (!res.full || res.partial) continue;
+    // how telling the words are: rare catalogue words (FEMMINELLE, PORTAGOMMA) count a lot, common ones (MADE, MARINE) little
+    const N = INDEX.rows.length, idf = res.toks.filter(t => VOCAB.has(t) && /[a-zà-ÿ]{3}/.test(t)).reduce((a, t) => a + Math.log(N / (1 + VOCAB.get(t).length)), 0);
+    if (words.length >= 2 ? idf >= 5 : idf >= 4) strong.push({ res, idf, n: toks.length });
   }
+  // the most telling line wins
+  strong.sort((p, q) => q.idf - p.idf || q.n - p.n);
   const out = [], seenB = new Set();
-  for (const [r, s] of [...score].filter(([r]) => hits.get(r) >= 2).sort((a, b) => b[1] - a[1])) {
-    const b = INDEX.rows[r].b, key = b >= 0 ? b : 'r' + r; if (seenB.has(key)) continue; seenB.add(key); out.push(r); if (out.length >= 4) break;
+  const add = list => { for (const r of list) { const b = INDEX.rows[r].b, key = b >= 0 ? b : 'r' + r; if (seenB.has(key)) continue; seenB.add(key); out.push(r); if (out.length >= 4) return; } };
+  for (const s of strong) { add(s.res.list.slice(0, 1)); if (out.length >= 4) break; }
+  if (out.length < 4) {
+    const toks = boxToks(lines.join(' '));
+    if (toks.length) {
+      const res = search('', toks.join(' ').slice(0, 500));
+      // two words in common, or one rare long word ("AQUA KEM" -> aquakem)
+      if (res.list.length && ((res.best || 0) >= 2 || res.toks.some(rareWord))) add(res.list);
+    }
   }
+  for (const s of strong) { if (out.length >= 4) break; add(s.res.list); }
   return out;
 }
 function itemBtn(i) {
@@ -1710,15 +1891,16 @@ async function camAnalyze(cv, big, preCode) {
   $('camRes').innerHTML = '<div id="codeBox"><p class="visnote">Leggo il codice…</p></div><div id="visBox"><p class="visnote">Cerco l\'articolo nelle foto del catalogo…</p></div>';
   const codes = [];
   const showCodes = how => {
-    camShow('codeBox', `<div class="codehit"><h3 class="sec-title"><span>Codice letto${how === 'barcode' ? ' dal codice a barre' : ' sulla foto'}</span><span>${codes.length > 1 ? codes.length : ''}</span></h3><div class="list">${codes.map(c => itemBtn(INDEX.rows.findIndex(r => r.c === c))).join('')}</div></div>`, true);
+    camShow('codeBox', `<div class="codehit"><h3 class="sec-title"><span>Codice letto${how === 'barcode' ? ' dal codice a barre' : how === 'penna' ? ' sulla scatola' : ' sulla foto'}</span><span>${codes.length > 1 ? codes.length : ''}</span></h3><div class="list">${codes.map(c => itemBtn(INDEX.rows.findIndex(r => r.c === c))).join('')}</div></div>`, true);
   };
   if (preCode) { codes.push(preCode); showCodes('barcode'); }
   const codeJob = (preCode ? Promise.resolve({ codes: [], near: [], text: '' }) : readCodes(big || cv, codeSet(), (c, how) => { if (!live()) return; codes.push(c); showCodes(how); }, live)).then(r => {
     if (!live() || codes.length) return;
-    const found = textFind(r.text), near = r.near.filter(c => codeSet().has(c));
+    const found = textFind(r.text), near = r.near.filter(c => codeSet().has(c)), textFirst = found.length && r.nearCost >= 5;
     let html = '';
-    if (near.length) html += `<h3 class="sec-title"><span>Codice letto in parte: forse è</span></h3><div class="list">${near.map(c => itemBtn(INDEX.rows.findIndex(x => x.c === c))).join('')}</div>`;
-    if (found.length) html += `<h3 class="sec-title"><span>Dal testo sulla foto</span></h3><div class="list">${found.map(itemBtn).join('')}</div>`;
+    const nearH = near.length ? `<h3 class="sec-title"><span>Codice letto in parte: forse è</span></h3><div class="list">${near.map(c => itemBtn(INDEX.rows.findIndex(x => x.c === c))).join('')}</div>` : '';
+    const foundH = found.length ? `<h3 class="sec-title"><span>Dal testo sulla foto</span></h3><div class="list">${found.map(itemBtn).join('')}</div>` : '';
+    html += textFirst ? foundH + nearH : nearH + foundH;
     if (!html) { const ws = ocrWords(r.text); if (ws.length) html = '<p class="visnote">Nessun codice leggibile. Testo letto sulla foto, tocca per cercarlo:</p><div class="recent" style="flex-wrap:wrap">' + ws.map(w => `<button type="button" data-word="${esc(w)}" style="font-family:var(--f-ui)">${esc(w)}</button>`).join('') + '</div>'; }
     camShow('codeBox', html || '<p class="visnote">Nessun codice leggibile sulla foto.</p>');
   }).catch(() => { if (live() && !codes.length) camShow('codeBox', ''); });
@@ -2034,7 +2216,7 @@ async function renderBox(page, box, maxW) {
   const bw = (x1 - x0) * base.width, bh = (y1 - y0) * base.height;
   const scale = Math.min(6, Math.max(1.5, maxW * Math.min(3, window.devicePixelRatio || 1) / bw));
   // Render near the source resolution, then upscale smoothly: sharper than letting the PDF engine stretch a small bitmap.
-  const rs = Math.min(scale, 3);
+  const rs = Math.min(scale, 5);
   const vp = page.getViewport({ scale: rs, offsetX: -x0 * base.width * rs, offsetY: -y0 * base.height * rs });
   let cv = document.createElement('canvas');
   cv.width = Math.ceil(bw * rs); cv.height = Math.ceil(bh * rs);
@@ -2184,9 +2366,22 @@ async function handleFile(file, bufP) {
       showErr('Nel PDF non ho trovato codici nel formato 00.0000.00. Se il PDF è fatto di sole immagini (scansione), serve la versione con il testo.');
       return;
     }
+    // checked before it replaces the catalogue in use
+    overlay(false);
+    const chk = catCheck(idx);
+    if (!(await catAsk(chk))) { toast('Tengo il catalogo di prima'); setTimeout(() => location.reload(), 900); return; }
     overlay(true, 'Salvataggio', 'Salvo il catalogo sul dispositivo…', 1);
     const key = idx.at;
-    await idbSet('index', idx); await idbSet('meta', {}); await idbSet('pdf', file); await idbSet('pdfKey', key);
+    const oldIdx = await idbGet('index'), oldPdf = await idbGet('pdf'), oldKey = await idbGet('pdfKey');
+    if (oldIdx && oldPdf && !oldIdx.example) { await idbSet('indexPrev', oldIdx); await idbSet('pdfPrev', oldPdf); await idbSet('pdfKeyPrev', oldKey); }
+    const ok = (await idbSet('pdf', file)) && (await idbSet('index', idx)) && (await idbSet('pdfKey', key));
+    if (!ok) {
+      // not enough space or storage error: put the previous catalogue back
+      if (oldIdx) { await idbSet('index', oldIdx); if (oldPdf) await idbSet('pdf', oldPdf); await idbSet('pdfKey', oldKey); }
+      overlay(false); showErr('Non riesco a salvare il catalogo nuovo (memoria del dispositivo piena?). Resta il catalogo di prima.');
+      setTimeout(() => location.reload(), 2500); return;
+    }
+    await idbSet('meta', {});
     setIndex(idx, {});
     await syncUp(idx, file);
     overlay(false);
@@ -2380,7 +2575,7 @@ window.__shareProgress = p => { if (sharing) overlay(true, SHARE_T, 'Creo l\'app
 window.__shareDone = (ok, msg) => { sharing = false; overlay(false); if (!ok) toast(msg || 'Condivisione non riuscita'); };
 $('shareAndroid').addEventListener('click', shareApp);
 // iPhone: the web version, opened in Safari and added to the Home screen. The link is copied and pasted in the chat.
-const IOS_URL = 'https://serginolimoncino.github.io/battagli-catalogo/';
+const IOS_URL = 'https://serginolimoncino.github.io/battagli-cliente/';
 $('shareIos').addEventListener('click', () => {
   const box = $('iosBox'); box.hidden = !box.hidden;
   $('iosUrl').value = IOS_URL || 'Link non ancora impostato'; $('iosCopy').hidden = !IOS_URL;
@@ -2464,7 +2659,56 @@ async function upgradeIndex() {
 }
 
 // ---------- boot ----------
+
+// ---------- first start without a catalogue: get it from this edition's site ----------
+const SITE_CAT = 'https://serginolimoncino.github.io/battagli-cliente/CATALOG/'.replace('CATALOG', 'catalog');
+async function siteCatalog() {
+  const cur = await idbGet('index');
+  try { const r = await fetch('./catalog/info.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
+  try { const r = await fetch('./catalog/index.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
+  let info = null;
+  try { const r = await fetch(SITE_CAT + 'info.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) {}
+  if (!info || !info.at) return false;
+  if (cur && cur.rows && cur.rows.length) {
+    // a newer catalogue was published: ask once, the one in use stays as "catalogo precedente"
+    if (!cur.example && cur.at >= info.at) return false;
+    if (lsGet('catSkip', 0) === info.at) return false;
+    if (!cur.example && !confirm('È disponibile il nuovo ' + (info.name || 'catalogo').replace(/_/g, ' ') + ' con le foto più nitide (' + Math.round((info.size || 0) / 1048576) + ' MB). Lo scarico adesso? Serve internet per qualche minuto. Il catalogo di adesso resta salvato.')) { lsSet('catSkip', info.at); return false; }
+    try { const op = await idbGet('pdf'), ok = await idbGet('pdfKey'); if (!cur.example && op) { await idbSet('indexPrev', cur); await idbSet('pdfPrev', op); await idbSet('pdfKeyPrev', ok); } } catch (e) {}
+  }
+  const T = 'Scarico il catalogo';
+  overlay(true, T, 'Serve internet per qualche minuto…', 0.02);
+  const idx = await (await fetch(SITE_CAT + 'index.json')).json();
+  if (!idx || !idx.rows || !idx.rows.length) throw new Error('index');
+  const pr = await fetch(SITE_CAT + 'catalogo.pdf'); if (!pr.ok) throw new Error('pdf');
+  const total = +pr.headers.get('content-length') || info.size || 0; let got = 0; const parts = [];
+  if (pr.body && pr.body.getReader) {
+    const rd = pr.body.getReader();
+    for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length;
+      if (total) overlay(true, T, 'Catalogo PDF: ' + Math.round(got / 1048576) + ' di ' + Math.round(total / 1048576) + ' MB', 0.05 + 0.8 * got / total); }
+  } else parts.push(new Uint8Array(await pr.arrayBuffer()));
+  const pdf = new Blob(parts, { type: 'application/pdf' });
+  if (info.vis) {
+    try {
+      overlay(true, T, 'Foto per la ricerca…', 0.88);
+      const om = await idbGet('vismeta'); if (om) { for (let c = 0; c < (om.chunks || 0); c++) await idbDel('vis:' + c); await idbSet('vismeta', null); }
+      const vj = await (await fetch(SITE_CAT + 'vis.json')).json(), vb = new Uint8Array(await (await fetch(SITE_CAT + 'vis.bin')).arrayBuffer());
+      let chunks = 0;
+      for (let k = 0; k < vj.items.length; k += 120) {
+        const part = vj.items.slice(k, k + 120).map((it, j) => ({ p: it.p, b: it.b, rows: it.rows, e: vb.slice((k + j) * 1024, (k + j + 1) * 1024) }));
+        await idbSet('vis:' + chunks, part); chunks++;
+      }
+      await idbSet('vismeta', { at: idx.at, chunks, next: vj.next });
+    } catch (e) {}
+  }
+  overlay(true, T, 'Salvo il catalogo…', 0.96);
+  if (!(await idbSet('pdf', pdf))) throw new Error('save');
+  await idbSet('index', idx); await idbSet('meta', {}); await idbSet('pdfKey', idx.at);
+  overlay(false);
+  return true;
+}
 (async function boot() {
+  try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { overlay(false); }
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
   try { if (APP && APP.importBusy()) overlay(true, 'Preparo il catalogo', 'Apro il catalogo ricevuto…', 0.05); } catch {}
   try {
@@ -2499,8 +2743,8 @@ async function upgradeIndex() {
   }
 })();
 
-// ---------- numeri utili: editable, saved on this device ----------
-const NUM_DEFAULT = [{"t": "Cellulari", "items": [{"n": "Battagli Fisso", "v": "0187 500739"}, {"n": "Giovanni Mobile", "v": "701"}, {"n": "Manuela Mobile", "v": "702"}, {"n": "Alex Mobile", "v": "703"}, {"n": "Andrea Toscana", "v": "704"}, {"n": "Consegne Urbane", "v": "705"}, {"n": "Sara Scaduto", "v": "706"}]}, {"t": "Uffici", "items": [{"n": "Amministrazione", "v": "301"}, {"n": "Contabilità", "v": "302"}, {"n": "Ufficio", "v": "303"}, {"n": "Ufficio Giovanni", "v": "304"}, {"n": "Tecnico", "v": "305"}, {"n": "Ufficio Alex", "v": "306"}]}, {"t": "Negozi e acquisti", "items": [{"n": "Nautica 1", "v": "101"}, {"n": "Nautica 2", "v": "102"}, {"n": "Marine Shopping", "v": "103"}, {"n": "Ferramenta 1", "v": "121"}, {"n": "Ferramenta 2", "v": "122"}, {"n": "Ufficio Acquisti", "v": "123"}, {"n": "Mirabello 1", "v": "131"}, {"n": "Mirabello 2", "v": "132"}]}, {"t": "Magazzino e servizi", "items": [{"n": "Magazzino 1", "v": "201"}, {"n": "Magazzino 2", "v": "202"}, {"n": "Magazzino 3", "v": "203"}, {"n": "Speed Service", "v": "401"}]}];
+// ---------- list: editable, saved on this device ----------
+const NUM_DEFAULT = [];
 let NUMS = JSON.parse(JSON.stringify(NUM_DEFAULT)), numEditing = false, numCur = null;
 const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
 const PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
@@ -2573,7 +2817,8 @@ function renderFav() {
   const fav = lsGet('fav', []).filter(c => byCode.has(c));
   $('favCount').textContent = fav.length ? String(fav.length) : '';
   $('favSec').hidden = !fav.length || !!($('q').value + $('qd').value).trim();
-  $('favList').innerHTML = fav.map(c => `<button class="rrow" type="button" data-code="${c}"><i style="background:${(REP_ICON[c.slice(0, 2)] || {}).c || 'var(--blue)'}"></i><b>${fmtCode(c)}</b><span>${esc(famTitle(byCode.get(c)))}</span>${STAR.replace('<svg', '<svg class="star"')}</button>`).join('');
+  $('favList').innerHTML = fav.length ? `<button class="favopen" type="button" id="favOpen"><span class="fstar">${STAR}</span><span><b>I miei preferiti</b><small>${fav.length === 1 ? '1 articolo' : fav.length + ' articoli'} · tocca per aprire</small></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>` : '';
+  if (!$('favSheet').hidden) favPageRender();
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-fav]'); if (!b) return;
@@ -2583,9 +2828,112 @@ document.addEventListener('click', e => {
   toast(on ? 'Aggiunto ai preferiti' : 'Tolto dai preferiti'); renderFav();
 });
 
+// ---------- new catalogue: check before replacing ----------
+function catStats(idx) {
+  const codes = new Set(idx.rows.map(r => r.c));
+  const priced = new Set(idx.rows.filter(r => (r.f || []).some(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(v))).map(r => r.c));
+  return { codes, n: codes.size, priced: priced.size, pages: idx.pages || 0, name: idx.name || '' };
+}
+function catCheck(idx) {
+  const nw = catStats(idx), old = INDEX && !INDEX.example && INDEX.rows && INDEX.rows.length ? catStats(INDEX) : null, warn = [];
+  if (nw.n < 1000) warn.push(`Ho trovato solo ${nw.n.toLocaleString('it-IT')} articoli: sembra un PDF incompleto o di un altro tipo.`);
+  if (old && nw.n < old.n * 0.7) warn.push(`Ha molti meno articoli di quello in uso (${nw.n.toLocaleString('it-IT')} invece di ${old.n.toLocaleString('it-IT')}).`);
+  if (nw.n && nw.priced / nw.n < 0.9) warn.push(`${(nw.n - nw.priced).toLocaleString('it-IT')} articoli senza prezzo (${Math.round(100 * (1 - nw.priced / nw.n))}%).`);
+  let same = 0; if (old) for (const c of nw.codes) if (old.codes.has(c)) same++;
+  if (old && same < Math.min(nw.n, old.n) * 0.5) warn.push('Quasi tutti i codici sono diversi da quelli del catalogo in uso: controlla che sia il catalogo giusto.');
+  return { nw, old, same, warn };
+}
+function catAsk(chk) {
+  return new Promise(done => {
+    const f = n => n.toLocaleString('it-IT'), { nw, old } = chk;
+    $('catDlgBody').innerHTML = `<table><tr><th></th><th>Nuovo</th>${old ? '<th>In uso</th>' : ''}</tr>
+      <tr><td>Articoli</td><td>${f(nw.n)}</td>${old ? `<td>${f(old.n)}</td>` : ''}</tr>
+      <tr><td>Con prezzo</td><td>${f(nw.priced)}</td>${old ? `<td>${f(old.priced)}</td>` : ''}</tr>
+      <tr><td>Pagine</td><td>${f(nw.pages)}</td>${old ? `<td>${f(old.pages)}</td>` : ''}</tr>
+      ${old ? `<tr><td>Codici uguali</td><td colspan="2">${f(chk.same)}</td></tr>` : ''}</table>` +
+      (chk.warn.length ? `<div class="catwarn">Attenzione:<ul>${chk.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '<p class="catok">Il catalogo nuovo è a posto.</p>') +
+      '<p class="note">Il catalogo di prima resta salvato: da Impostazioni puoi sempre tornarci.</p>';
+    $('catUse').classList.toggle('primary', !chk.warn.length); $('catKeep').classList.toggle('primary', !!chk.warn.length);
+    $('catKeep').style.cssText = chk.warn.length ? '' : 'background:var(--soft);color:var(--ink)'; $('catUse').style.cssText = chk.warn.length ? 'background:var(--soft);color:var(--ink)' : '';
+    const end = v => { $('catDlg').hidden = true; $('catUse').onclick = $('catKeep').onclick = null; done(v); };
+    $('catUse').onclick = () => end(true); $('catKeep').onclick = () => end(false);
+    $('catDlg').hidden = false;
+  });
+}
+(async () => { if (await idbGet('indexPrev')) $('catBack').hidden = false; })();
+$('catBack').addEventListener('click', async () => {
+  const b = $('catBack');
+  if (!b.classList.contains('sure')) { const p = await idbGet('indexPrev'); b.classList.add('sure'); b.textContent = 'Tocca di nuovo: torna a ' + ((p && p.name) || 'catalogo precedente'); return; }
+  const [pi, pp, pk, ci, cp, ck] = await Promise.all(['indexPrev', 'pdfPrev', 'pdfKeyPrev', 'index', 'pdf', 'pdfKey'].map(idbGet));
+  if (!pi || !pp) { toast('Catalogo precedente non trovato'); return; }
+  await idbSet('pdf', pp); await idbSet('index', pi); await idbSet('pdfKey', pk); await idbSet('meta', {});
+  // the two swap places, so it can be undone the same way
+  if (ci && cp) { await idbSet('indexPrev', ci); await idbSet('pdfPrev', cp); await idbSet('pdfKeyPrev', ck); }
+  toast('Torno al catalogo ' + (pi.name || 'precedente')); setTimeout(() => location.reload(), 900);
+});
+
+// ---------- Preferiti page ----------
+function favPrice(r) { const p = (r.f || []).find(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(v)); return p ? p[1] : ''; }
+function favPageRender() {
+  const byCode = new Map(); INDEX.rows.forEach((r, i) => { if (!byCode.has(r.c)) byCode.set(r.c, i); });
+  const all = lsGet('fav', []).filter(c => byCode.has(c));
+  const t = fold($('favQ').value).split(/[^a-z0-9]+/).filter(Boolean);
+  const list = t.length ? all.filter(c => { const i = byCode.get(c); return t.every(w => (HAY[i] || '').includes(w) || c.replace(/\./g, '').includes(w)); }) : all;
+  $('favSub').textContent = all.length === 1 ? '1 articolo' : all.length.toLocaleString('it-IT') + ' articoli';
+  const groups = new Map();
+  for (const c of [...list].sort()) { const k = c.slice(0, 2); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+  $('favPage').innerHTML = [...groups].map(([k, cs]) => `<div class="frep"><i style="background:${(REP_ICON[k] || {}).c || 'var(--blue)'}"></i>${esc((typeof REPARTI !== 'undefined' && REPARTI[k]) || 'Reparto ' + k)} · ${cs.length}</div><div class="fgrid">` + cs.map(c => {
+    const i = byCode.get(c), r = INDEX.rows[i], pr = favPrice(r);
+    return `<div class="fitem"><button class="fam" type="button" data-i="${i}"><span class="thumb" data-thumb="${i}"></span><span style="min-width:0"><b>${esc(famTitle(r))}</b><span class="s">${fmtCode(c)}${pr ? `<span class="pr">${esc(pr)}</span>` : ''}</span></span></button><button class="favx" type="button" data-unfav="${c}" aria-label="Togli dai preferiti">${STAR}</button></div>`;
+  }).join('') + '</div>').join('') || `<div class="empty"><b>${all.length ? 'Nessun preferito trovato' : 'Nessun preferito'}</b></div>`;
+  if (typeof hydrateThumbs === 'function') hydrateThumbs();
+}
+function favPageOpen() { $('favQ').value = ''; $('favSheet').hidden = false; $('favSheet').scrollTop = 0; document.body.style.overflow = 'hidden'; favPageRender(); }
+function favPageClose() { $('favSheet').hidden = true; if ($('sheet').hidden && $('camSheet').hidden && $('browseSheet').hidden) document.body.style.overflow = ''; }
+document.addEventListener('click', e => {
+  if (e.target.closest('#favOpen')) { favPageOpen(); return; }
+  if (e.target.closest('#favClose')) { favPageClose(); return; }
+  const u = e.target.closest('[data-unfav]'); if (!u) return;
+  lsSet('fav', lsGet('fav', []).filter(x => x !== u.dataset.unfav)); toast('Tolto dai preferiti'); renderFav(); favPageRender();
+});
+$('favQ').addEventListener('input', favPageRender);
+{ const prevBack = window.__back; window.__back = function () {
+  if (!$('sheet').hidden || !$('camSheet').hidden || !$('cmpSheet').hidden) return prevBack();
+  const z = $('zoomImg'); if (z && !z.hidden) return prevBack();
+  if (!$('favSheet').hidden) { favPageClose(); return true; }
+  return prevBack();
+}; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('sheet').hidden && !$('favSheet').hidden) favPageClose(); });
+
+// ---------- share the app: Android / iPhone / PC Windows, always this edition ----------
+const SHARE_URL = { android: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-Marine-Hardware.apk', ios: 'https://serginolimoncino.github.io/battagli-cliente/', pc: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-PC-Windows.zip' };
+const SHARE_TXT = { android: 'Catalogo Battagli per Android: scarica e installa l\'app da questo link.', ios: 'Catalogo Battagli per iPhone: apri il link con Safari, poi Condividi > "Aggiungi alla schermata Home".', pc: 'Catalogo Battagli per PC Windows: scarica lo zip, estrailo e apri "Battagli Catalogo".' };
+async function shareTo(k) {
+  const url = SHARE_URL[k], text = SHARE_TXT[k];
+  try { if (navigator.share) { await navigator.share({ title: 'Catalogo Battagli', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  let ok = false; try { await navigator.clipboard.writeText(text + ' ' + url); ok = true; } catch (e) {}
+  if (!ok) { const t = document.createElement('textarea'); t.value = text + ' ' + url; document.body.appendChild(t); t.select(); try { ok = document.execCommand('copy'); } catch (e) {} t.remove(); }
+  toast(ok ? 'Link copiato: incollalo su WhatsApp o nella mail' : url);
+}
+for (const id of ['shareAndroid', 'shareIos']) { const o = document.getElementById(id); if (o) o.replaceWith(o.cloneNode(true)); }
+$('shareSec').hidden = false; $('shareIos').removeAttribute('aria-disabled');
+$('shareAndroid').addEventListener('click', () => (typeof APP !== 'undefined' && APP && typeof shareApp === 'function') ? shareApp() : shareTo('android'));
+$('shareIos').addEventListener('click', () => shareTo('ios'));
+$('sharePc').addEventListener('click', () => shareTo('pc'));
+// ---------- share links (this edition only) ----------
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const inp = b.parentElement.querySelector('input'), v = inp.value;
+  let ok = false;
+  try { await navigator.clipboard.writeText(v); ok = true; } catch (err) {}
+  if (!ok) { try { inp.focus(); inp.select(); ok = document.execCommand('copy'); } catch (err) {} }
+  toast(ok ? 'Link copiato: incollalo su WhatsApp o nella mail' : 'Tieni premuto sul link per copiarlo');
+});
+
 // ---------- one-tap updates ----------
-const APP_V = 21, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
-const vTxt = n => (n / 10).toFixed(1);
+const APP_V = 22, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+// Sergio wants the version shown as 2.0; the build number behind it still grows with every update
+const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
 $('appVer').textContent = 'versione ' + vTxt(APP_V);
 try { localStorage.removeItem('appcodeTry'); } catch {}
