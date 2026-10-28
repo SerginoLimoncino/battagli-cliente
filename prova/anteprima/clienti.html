@@ -977,10 +977,11 @@ let currentRow = null;
 
 // ---------- local storage (IndexedDB) ----------
 let idbP = null;
+const DBN = n => APP_ED === 'cliente' && /github\.io$/.test(location.hostname) ? n + '-clienti' : n;
 function idb() {
   if (!idbP) idbP = new Promise((res, rej) => {
     try {
-      const r = indexedDB.open('catalogo-codici', 1);
+      const r = indexedDB.open(DBN('catalogo-codici'), 1);
       r.onupgradeneeded = () => r.result.createObjectStore('kv');
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -2421,7 +2422,7 @@ async function renderBox(page, box, maxW) {
 }
 // ---- photos kept on the device ----
 let fotoP = null; const FOTO_MAX = 40 * 1024 * 1024; let fotoMeta = null, fotoMetaT = 0;
-function fotoDb() { if (!fotoP) fotoP = new Promise((res, rej) => { try { const r = indexedDB.open('battagli-foto', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); return fotoP; }
+function fotoDb() { if (!fotoP) fotoP = new Promise((res, rej) => { try { const r = indexedDB.open(DBN('battagli-foto'), 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); return fotoP; }
 async function fotoGet(k) { try { const d = await fotoDb(); return await new Promise(res => { const q = d.transaction('f').objectStore('f').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } }
 async function fotoPut(k, v) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); t.objectStore('f').put(v, k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
 async function fotoDel(ks) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); for (const k of ks) t.objectStore('f').delete(k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
@@ -2966,6 +2967,14 @@ async function siteCatalog() {
   return true;
 }
 (async function boot() {
+  // 1793206457477 = first customer catalogue without prices, saved before it carried ed: 'cliente'
+  const cliCat = c => c && (c.ed === 'cliente' || c.at === 1793206457477);
+  try { await 0;  // APP_ED is declared further down the script
+    if (APP_ED !== 'cliente') {
+    if (cliCat(await idbGet('index'))) for (const k of ['index', 'pdf', 'pdfKey', 'meta', 'pre', 'vismeta']) await idbDel(k);
+    if (cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+    }
+  } catch (e) {}
   let hasCat = false; try { const c = await idbGet('index'); hasCat = !!(c && c.rows && c.rows.length && !c.example); } catch (e) {}
   const catFail = () => { overlay(false); toast('Download del catalogo non riuscito: riprovo alla prossima apertura'); };
   if (!hasCat) { try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { catFail(); } }
