@@ -2597,7 +2597,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 26, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 27, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -4391,6 +4391,330 @@ if (typeof window.search === 'function') { const S0 = window.search; window.sear
 window.VelaInfo = { explain, sections, open, mount, openSheet };
 const orig = window.openRow;
 window.openRow = function (i) { const r = orig.apply(this, arguments); try { mount(i); } catch (err) { console.warn('info', err); } return r; };
+})();
+
+</script><script>
+// Novità 2.0 (build 26): ricerca a voce e "Forse cercavi…".
+
+// Tutto succede sul telefono: nessuna pagina esterna, nessun servizio online.
+(function () {
+'use strict';
+const ED = (typeof APP_ED !== 'undefined' && APP_ED) || 'interno', PF = (typeof APP_PF !== 'undefined' && APP_PF) || 'web';
+const $$ = id => document.getElementById(id);
+const escH = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const say = t => { try { toast(t); } catch (e) {} };
+const ready = () => typeof INDEX !== 'undefined' && INDEX && INDEX.rows && !INDEX.example;
+
+const css = document.createElement('style');
+css.textContent = `
+.micbtn { color: var(--blue); }
+.micbtn svg { width: 22px; height: 22px; }
+.micbtn[aria-pressed="true"] { color: #fff; background: var(--red, #d33); border-radius: 999px; }
+.nv-voice { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--bg); box-shadow: var(--card-shadow); font-size: 14px; color: var(--ink); }
+.nv-voice i { width: 10px; height: 10px; border-radius: 50%; background: var(--red, #d33); flex: none; animation: nvpulse 1s ease-in-out infinite; }
+.nv-voice span { flex: 1; min-width: 0; }
+.nv-voice small { display: block; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-voice button { border: 0; background: var(--blue-soft); color: var(--blue); border-radius: 999px; padding: 10px 14px; font-weight: 700; font-size: 13px; }
+@keyframes nvpulse { 50% { opacity: .35; } }
+.nv-sugg { margin-top: 16px; text-align: left; }
+.nv-sugg > p { margin: 0 0 8px; color: var(--ink); font-weight: 800; font-size: 15px; }
+.nv-sugg .nv-fix { display: inline-flex; border: 0; background: var(--blue-soft); color: var(--blue); border-radius: 999px; padding: 8px 14px; font-weight: 800; font-size: 15px; margin: 0 0 10px; }
+.nv-sugg .list { display: grid; gap: 8px; margin: 0 -12px; }
+.nv-sugg .item { color: var(--ink); text-align: left; }
+.nv-sugg .item .thumb { width: 64px; height: 64px; flex: none; }
+@media (max-width: 440px) { .nv-sugg .item .pg { display: none; } }
+
+`;
+document.head.appendChild(css);
+
+// ---------------------------------------------------------------- ricerca a voce
+// Parole dette a voce -> testo da cercare: "otto" -> 8, "dieci punto zero tre due zero" -> 10.0320, "otto per venti" -> 8x20.
+const UNI = { zero: 0, uno: 1, un: 1, una: 1, due: 2, tre: 3, quattro: 4, cinque: 5, sei: 6, sette: 7, otto: 8, nove: 9, dieci: 10, undici: 11, dodici: 12, tredici: 13, quattordici: 14, quindici: 15, sedici: 16, diciassette: 17, diciotto: 18, diciannove: 19 };
+const TEN = { venti: 20, trenta: 30, quaranta: 40, cinquanta: 50, sessanta: 60, settanta: 70, ottanta: 80, novanta: 90 };
+function itNum(w) {
+  // "ventotto", "centoventi", "duemila": the whole word must be a number, or null
+  if (!w) return null;
+  w = w.replace(/[éè]/g, 'e');
+  if (!/^[a-z]+$/.test(w)) return null;
+  if (w in UNI) return UNI[w];
+  const unit = s => s === '' ? 0 : (s in UNI && UNI[s] < 10 ? UNI[s] : null);
+  const sub100 = s => {
+    if (s === '') return 0;
+    if (s in UNI) return UNI[s];
+    for (const [t, v] of Object.entries(TEN)) {
+      for (const p of [t, t.slice(0, -1)]) if (s.startsWith(p)) { const u = s.slice(p.length); if (p !== t && !/^[ou]/.test(u)) continue; const n = unit(u); if (n != null) return v + n; }
+    }
+    return null;
+  };
+  const sub1000 = s => {
+    const k = s.indexOf('cento');
+    if (k < 0) return sub100(s);
+    const h = s.slice(0, k), rest = s.slice(k + 5);
+    const hv = h === '' ? 1 : (h in UNI && UNI[h] > 1 && UNI[h] < 10 ? UNI[h] : null);
+    // "centotto", "centottanta": the o of cento is shared with otto/ottanta
+    const rv = sub100(/^tt/.test(rest) ? 'o' + rest : rest);
+    return hv == null || rv == null ? null : hv * 100 + rv;
+  };
+  let m = w.match(/^(.*?)(mille|mila)(.*)$/);
+  if (m) {
+    const th = m[2] === 'mille' ? (m[1] === '' ? 1 : null) : sub1000(m[1]);
+    const r = sub1000(m[3]);
+    return th == null || r == null || (m[2] === 'mila' && th < 2) ? null : th * 1000 + r;
+  }
+  return sub1000(w);
+}
+const ART = new Set(['un', 'una', 'uno']);
+const numTok = w => w != null && ((!ART.has(w) && itNum(w) != null) || /^\d/.test(w));
+function voiceText(raw) {
+  let t = String(raw || '').toLowerCase().replace(/[!?;:"“”]/g, ' ')
+    .replace(/(\d{2})\s*[-/]\s*(\d{4})\s*[-/]\s*(\d{2})/g, '$1.$2.$3')
+    .replace(/(\d)\s*[,.]\s*(?=\d)/g, a => a.replace(/\s+/g, ''));
+  const toks = t.split(/\s+/).filter(Boolean).map(w => w.replace(/^[,.]+|[,.]+$/g, '')).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const w = toks[i], prev = out[out.length - 1], next = toks[i + 1];
+    // "un grillo" stays words; "zero uno", "uno punto zero…", "uno e mezzo" are numbers
+    if (ART.has(w)) { out.push(prev != null && /^[\d.,]+$/.test(prev) || numTok(next) || next === 'punto' || next === 'virgola' ? '1' : w); continue; }
+    const n = itNum(w);
+    if (n != null) { out.push(String(n)); continue; }
+    if ((w === 'punto' || w === 'virgola') && prev != null && /\d$/.test(prev) && (numTok(next) || ART.has(next))) { out.push(w === 'punto' ? '.' : ','); continue; }
+    if (w === 'per' && prev != null && /^\d+([.,]\d+)?$/.test(prev) && numTok(next) && !(next === 'cento' && i + 2 === toks.length)) { out.push('x'); continue; }
+    out.push({ millimetri: 'mm', millimetro: 'mm', centimetri: 'cm', centimetro: 'cm', metri: 'mt', metro: 'mt' }[w] || w);
+  }
+  // "codice 01 0004 03", "cerca grillo": the command word is not part of what is searched
+  while (out.length > 1 && /^(codice|articolo|cerca|cercami|trova|trovami|il|lo|la)$/.test(out[0])) out.shift();
+  // glue "10 . 0320 . 02" and "8 x 20" back together
+  const parts = out.join(' ').replace(/(\d) ?([.,]) ?(?=\d)/g, '$1$2').replace(/(\d) x (?=\d)/g, '$1x').split(' ');
+  // a code said in pieces ("zero uno zero zero…", "01 0004 03") becomes one number; "mille duecento" does not
+  const res = [];
+  for (let i = 0; i < parts.length;) {
+    let j = i; while (j < parts.length && /^[\d.]+$/.test(parts[j]) && /\d/.test(parts[j])) j++;
+    if (j - i >= 2) {
+      const run = parts.slice(i, j), dg = run.join('').replace(/\D/g, '').length;
+      const single = run.every(x => /^\d$/.test(x));
+      const all = run.join('').replace(/\D/g, '');
+      if ((single && dg >= 4) || (dg >= 7 && dg <= 8 && (/^0/.test(run[0]) || /^\d\d?$/.test(run[0]) || run.some(x => x.includes('.')) || knownCode(all)))) { res.push(run.join('')); i = j; continue; }
+    }
+    if (j > i) { res.push(...parts.slice(i, j)); i = j; } else { res.push(parts[i]); i++; }
+  }
+  // a whole code wins over the words around it ("… zero tre grazie")
+  const code = res.find(x => /^[\d.]+$/.test(x) && /^\d{7,8}$/.test(x.replace(/\./g, '')));
+  return (code || res.join(' ')).trim();
+}
+function knownCode(d) { try { return rowOf(d) >= 0 || (d.length === 7 && rowOf('0' + d) >= 0); } catch (e) { return false; } }
+function codeLike(s) { const n = s.replace(/\D/g, '').length; return /^[\d.]+$/.test(s) && (n >= 6 || (n >= 4 && /^0/.test(s)) || /^\d\d\.\d/.test(s)); }
+function putQuery(s) {
+  const q = $$('q'), qd = $$('qd'); if (!q || !qd) return;
+  voicePut = true; try { return putQuery0(s, q, qd); } finally { voicePut = false; }
+}
+function putQuery0(s, q, qd) {
+  if (codeLike(s)) {
+    // a code read without its first zero ("uno punto zero zero zero quattro…") still finds the article
+    const d = s.replace(/\D/g, '');
+    if (d.length === 7 && ready() && !INDEX.rows.some(r => r.c.startsWith(d)) && INDEX.rows.some(r => r.c === '0' + d)) s = '0' + d;
+    q.value = s; qd.value = ''; q.dispatchEvent(new Event('input', { bubbles: true }));
+  } else { qd.value = s; if (q.value && /^[\d.\s]*$/.test(q.value)) q.value = ''; qd.dispatchEvent(new Event('input', { bubbles: true })); }
+  try { if (typeof showView === 'function' && $$('viewSearch') && $$('viewSearch').hidden) showView('search'); } catch (e) {}
+  return s;
+}
+window.__voiceText = voiceText; window.__voicePut = t => putQuery(voiceText(t));
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isElectron = /electron/i.test(navigator.userAgent || '');
+// the browser can listen by itself only on iPhone/web; the Android app and the PC program use the keyboard's microphone
+let canListen = !!SR && PF === 'web' && !isElectron;
+const MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+let rec = null, vbar = null;
+function vbarShow(main, sub) {
+  if (!vbar) {
+    vbar = document.createElement('div'); vbar.className = 'nv-voice'; vbar.id = 'nvVoice';
+    vbar.innerHTML = '<i></i><span><b></b><small></small></span><button type="button">Stop</button>';
+    vbar.querySelector('button').onclick = () => voiceStop(true);
+    const f = $$('searchForm'); f.parentNode.insertBefore(vbar, f.nextSibling);
+  }
+  vbar.hidden = false; vbar.querySelector('i').hidden = !rec;
+  vbar.querySelector('b').textContent = main; vbar.querySelector('small').textContent = sub || '';
+  vbar.querySelector('button').textContent = rec ? 'Stop' : 'Ok';
+}
+function vbarHide() { if (vbar) vbar.hidden = true; }
+let vHideT = 0;
+function keyboardHint() {
+  rec = null; const b = $$('micBtn'); if (b) b.setAttribute('aria-pressed', 'false');
+  const qd = $$('qd'); if (qd) { qd.focus(); try { qd.select(); } catch (e) {} }
+  const touch = 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
+  vbarShow(PF === 'pc' || !touch ? (/Mac/i.test(navigator.platform || '') ? 'Avvia la dettatura del Mac e parla' : 'Premi Windows + H e parla') : 'Tocca il microfono sulla tastiera e parla', 'Poi trovo l\'articolo da solo');
+  clearTimeout(vHideT); vHideT = setTimeout(vbarHide, 7000);
+  kbUntil = Date.now() + 90000; kbBig = false; kbLen = qd ? qd.value.length : 0;
+}
+// What the keyboard's microphone writes ("zero uno punto zero zero zero quattro…", "Grillo inox da otto") is read
+// like a spoken search too, but only after the mic button was used: typed searches stay exactly as typed.
+let kbUntil = 0, kbT = 0, kbLen = 0, kbBig = false;
+function kbDictation() {
+  clearTimeout(kbT);
+  const qd = $$('qd'); if (!qd) return;
+  // dictation writes whole words at once; typing by hand adds one letter at a time and is never rewritten mid-word
+  const grow = qd.value.length - kbLen; kbLen = qd.value.length; if (grow >= 2) kbBig = true;
+  if (Date.now() > kbUntil || voicePut) return;
+  kbT = setTimeout(() => {
+    if (Date.now() > kbUntil || !(kbBig || /\s$/.test(qd.value))) return;
+    const v = qd.value, c = voiceText(v);
+    if (!c || c === v.toLowerCase().replace(/\s+/g, ' ').trim()) return;
+    kbUntil = Date.now() + 90000; kbBig = false;
+    // a code said in groups with pauses ("zero uno" … "zero zero zero quattro" … "zero tre"): its digits wait in Descrizione until it is complete
+    if (codeLike(c) && c.replace(/\D/g, '').length < 7 && !/\./.test(c)) { voicePut = true; try { qd.value = c; qd.dispatchEvent(new Event('input', { bubbles: true })); } finally { voicePut = false; } kbLen = qd.value.length; return; }
+    putQuery(c); kbLen = qd.value.length;
+  }, 700);
+}
+function voiceStop(user) {
+  if (rec) { const r = rec; rec = null; try { user ? r.stop() : r.abort(); } catch (e) {} }
+  const b = $$('micBtn'); if (b) b.setAttribute('aria-pressed', 'false');
+  if (user) vbarHide();
+}
+function voiceStart() {
+  if (rec) { voiceStop(true); return; }
+  if (!canListen) { keyboardHint(); return; }
+  let r;
+  try { r = new SR(); } catch (e) { canListen = false; keyboardHint(); return; }
+  r.lang = 'it-IT'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+  let finalText = '', lastInterim = '', got = false, safeT = 0;
+  r.onresult = ev => {
+    let interim = ''; finalText = '';
+    for (let k = 0; k < ev.results.length; k++) { const x = ev.results[k]; if (x.isFinal) finalText += x[0].transcript; else interim += x[0].transcript; }
+    if (interim) lastInterim = interim;
+    got = true; if (rec === r) vbarShow('Ti ascolto…', finalText || interim);
+  };
+  r.onerror = ev => {
+    if (rec !== r) return;
+    const e = ev && ev.error;
+    if (e === 'not-allowed' || e === 'service-not-allowed' || e === 'network' || e === 'audio-capture') { canListen = false; keyboardHint(); return; }
+    voiceStop(false); vbarShow(e === 'no-speech' ? 'Non ho sentito niente: tocca il microfono e riprova' : 'Non ho capito: riprova', ''); clearTimeout(vHideT); vHideT = setTimeout(vbarHide, 3500);
+  };
+  r.onend = () => {
+    clearTimeout(safeT);
+    if (!finalText && lastInterim && rec === r) finalText = lastInterim;
+    if (rec !== r && !finalText) return;
+    const was = rec === r; rec = null; const b = $$('micBtn'); if (b) b.setAttribute('aria-pressed', 'false');
+    const s = voiceText(finalText);
+    if (s) { vbarShow('Ho cercato: ' + putQuery(s), ''); clearTimeout(vHideT); vHideT = setTimeout(vbarHide, 2500); }
+    else if (was) { vbarShow(got ? 'Non ho capito: riprova' : 'Non ho sentito niente: tocca il microfono e riprova', ''); clearTimeout(vHideT); vHideT = setTimeout(vbarHide, 3500); }
+  };
+  rec = r;
+  try { r.start(); } catch (e) { rec = null; canListen = false; keyboardHint(); return; }
+  const b = $$('micBtn'); if (b) b.setAttribute('aria-pressed', 'true');
+  // a recognizer that never answers must not leave the mic "on"
+  safeT = setTimeout(() => { if (rec === r) { try { r.stop(); } catch (e) {} setTimeout(() => { if (rec === r) { voiceStop(false); vbarShow('Non ho sentito niente: tocca il microfono e riprova', ''); clearTimeout(vHideT); vHideT = setTimeout(vbarHide, 3500); } }, 1500); } }, 15000);
+  clearTimeout(vHideT); vbarShow('Ti ascolto…', 'Di\' il nome o il codice, es. "grillo inox da 8"');
+}
+let voicePut = false;
+for (const id of ['q', 'qd']) { const el = $$(id); if (el) el.addEventListener('input', () => { if (!voicePut && !rec && vbar && !vbar.hidden) vbarHide(); if (id === 'qd') kbDictation(); }); }
+{ const qd = $$('qd'); if (qd) qd.addEventListener('blur', () => { setTimeout(() => { if (document.activeElement !== qd && document.activeElement !== $$('micBtn')) { clearTimeout(kbT); kbUntil = 0; } }, 1500); }); }
+(function micMount() {
+  const qd = $$('qd'); if (!qd || $$('micBtn')) return;
+  qd.insertAdjacentHTML('afterend', '<button class="iconbtn micbtn" id="micBtn" type="button" aria-pressed="false" aria-label="Cerca a voce">' + MIC + '</button>');
+  $$('micBtn').addEventListener('click', e => { e.preventDefault(); voiceStart(); });
+})();
+
+// ---------------------------------------------------------------- "Forse cercavi…"
+// When a search finds nothing: the codes one digit away from the one typed, or the catalogue words closest to the ones written.
+function dist(a, b, k) {
+  // Damerau (adjacent swap) edit distance, early stop above k
+  const n = a.length, m = b.length; if (Math.abs(n - m) > k) return k + 1;
+  let p2 = null, p1 = Array.from({ length: m + 1 }, (_, j) => j);
+  for (let i = 1; i <= n; i++) {
+    const cur = [i]; let mn = i;
+    for (let j = 1; j <= m; j++) {
+      let v = Math.min(p1[j] + 1, cur[j - 1] + 1, p1[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (p2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, p2[j - 2] + 1);
+      cur[j] = v; if (v < mn) mn = v;
+    }
+    if (mn > k) return k + 1; p2 = p1; p1 = cur;
+  }
+  return p1[m];
+}
+let CODES = null, CODES_AT = null, CMAP = null;
+function codeList() {
+  if (CODES_AT !== INDEX) { CODES_AT = INDEX; CMAP = new Map(); INDEX.rows.forEach((r, i) => { if (!CMAP.has(r.c)) CMAP.set(r.c, i); }); CODES = [...CMAP]; }
+  return CODES;
+}
+const rowOf = c => { codeList(); const i = CMAP.get(c); return i == null ? -1 : i; };
+// The suggestions are computed in small slices, so typing never waits for them; a newer query stops the old work.
+const tick = () => new Promise(r => setTimeout(r, 0));
+let T0 = 0; const due = () => { const t = performance.now(); if (t - T0 > 8) { T0 = t; return true; } return false; };
+async function codeSugg(d, alive) {
+  if (d.length < 4) return [];
+  const k = d.length >= 7 ? 2 : 1, out = [], list = codeList();
+  for (let n = 0; n < list.length; n++) {
+    if (!(n & 127) && due()) { await tick(); T0 = performance.now(); if (alive && !alive()) return null; }
+    const c = list[n][0];
+    let v = dist(d, c.slice(0, d.length), k);
+    if (d.length >= 7 && d.length !== c.length) v = Math.min(v, dist(d, c, k));
+    if (v <= k) out.push([v, c, list[n][1]]);
+  }
+  const pre = c => { let n = 0; while (n < d.length && c[n] === d[n]) n++; return n; };
+  out.sort((a, b) => a[0] - b[0] || pre(b[1]) - pre(a[1]) || a[1].localeCompare(b[1]));
+  return out.slice(0, 8).map(x => x[2]);
+}
+async function wordFix(t, alive) {
+  if (t.length < 3 || /^\d/.test(t) || typeof VOCAB === 'undefined' || !VOCAB) return null;
+  const k = t.length <= 4 ? 1 : 2; let best = null, n = 0;
+  for (const [w, rs] of VOCAB) {
+    if (!(++n & 127) && due()) { await tick(); T0 = performance.now(); if (alive && !alive()) return null; }
+    if (w.length < 3 || Math.abs(w.length - t.length) > k || /\d/.test(w)) continue;
+    const v = dist(t, w, k); if (v > k) continue;
+    const sc = v * 1000 - Math.min(rs.length, 999) - (w[0] === t[0] ? 500 : 0);
+    if (!best || sc < best[0]) best = [sc, w];
+  }
+  return best && best[1];
+}
+async function textSugg(q, qd, alive) {
+  const raw = (qd + ' ' + (/[a-z]/i.test(q) ? q : '')).trim(); if (!raw) return null;
+  const toks = words(normText(raw)).filter(t => !STOP.has(t)).slice(0, 8); if (!toks.length) return null;
+  let changed = false; const fixed = [];
+  for (const t of toks) {
+    if (/^\d/.test(t) || matchWord(t).size) { fixed.push(t); continue; }
+    const f = await wordFix(t, alive); if (alive && !alive()) return null;
+    if (f && f !== t) { changed = true; fixed.push(f); } else fixed.push(t);
+  }
+  if (!changed) return null;
+  const phrase = fixed.join(' ');
+  const res = window.search(/[a-z]/i.test(q) ? '' : q, phrase);
+  const list = res && res.list && res.list.length ? res.list : (window.search('', phrase).list || []);
+  return list.length ? { phrase, list: list.slice(0, 6) } : null;
+}
+function itemHtml(i) {
+  const r = INDEX.rows[i], b = INDEX.blocks[r.b] || {};
+  return `<button class="item" type="button" data-i="${i}"><span class="thumb" data-thumb="${i}"></span><span class="itxt"><span class="code">${fmtCode(r.c)}</span><span class="t">${escH(b.t || 'Articolo')}</span>${rowSummary(r) ? `<span class="v">${escH(rowSummary(r))}</span>` : ''}</span><span class="pg">pag. ${r.p}</span></button>`;
+}
+let suggT = 0, suggN = 0;
+function suggest() {
+  const res = $$('results'), em = res && res.querySelector(':scope > .empty');
+  if (!em || em.querySelector('.nv-sugg') || !ready()) return;
+  const q = $$('q').value, qd = $$('qd').value, key = q + '|' + qd, my = ++suggN;
+  const alive = () => my === suggN && em.isConnected && $$('q').value + '|' + $$('qd').value === key;
+  clearTimeout(suggT);
+  suggT = setTimeout(async () => {
+    if (!alive()) return;
+    let html = '';
+    try {
+      const d = /[a-z]/i.test(q) ? '' : digitsOf(q);
+      const t = await textSugg(q, qd, alive); if (!alive()) return;
+      if (t) html = `<p>Forse cercavi:</p><button class="nv-fix" type="button" data-nvfix="${escH(t.phrase)}">${escH(t.phrase)}</button><div class="list">${t.list.map(itemHtml).join('')}</div>`;
+      else if (d && !qd.trim()) { const l = await codeSugg(d, alive); if (!alive()) return; if (l && l.length) html = `<p>Forse cercavi uno di questi codici:</p><div class="list">${l.map(itemHtml).join('')}</div>`; }
+    } catch (e) { console.warn('sugg', e); }
+    if (!html || !alive() || em.querySelector('.nv-sugg')) return;
+    const box = document.createElement('div'); box.className = 'nv-sugg'; box.innerHTML = html; em.appendChild(box);
+    try { if (typeof hydrateThumbs === 'function') hydrateThumbs(); } catch (e) {}
+  }, 300);
+}
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-nvfix]'); if (!f) return;
+  const qd = $$('qd'), q = $$('q'); qd.value = f.dataset.nvfix; if (/[a-z]/i.test(q.value)) q.value = '';
+  qd.dispatchEvent(new Event('input', { bubbles: true }));
+});
+(function suggWatch() { const res = $$('results'); if (!res) return; new MutationObserver(suggest).observe(res, { childList: true }); })();
+window.__nvSugg = { codeSugg, textSugg, wordFix };
+
+
 })();
 
 </script></body></html>
