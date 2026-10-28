@@ -2672,7 +2672,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 33, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 34, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -3431,7 +3431,7 @@ const PROD = [
     'Spessore consigliato 40 micron a secco per mano: due mani a pennello o rullo.',
     'Diluente Hempel 08080, fino al 5% a pennello o rullo.',
     'Mano successiva dopo 4 ore a 20 °C (7 ore a 10 °C); varo dopo almeno 24 ore a 20 °C ed entro 9 mesi.'] }],
-  [/HARD RACING TECCEL|HARD RACING/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/76890/it-IT', fonte: 'scheda tecnica Hempel\'s Hard Racing Teccel', dati: [
+  [/^(?!.*76880).*HARD RACING/, { url: 'https://www.hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/76890/it-IT', fonte: 'scheda tecnica Hempel\'s Hard Racing Teccel', dati: [
     'Resa teorica 13 m² al litro.',
     'Due mani da 40 micron a secco, più una mano in più sulla linea di galleggiamento e nelle zone che si consumano.',
     'Diluente Hempel 08080, massimo 5% a pennello o rullo.',
@@ -3810,13 +3810,12 @@ const PROD = [
     'A 20 °C mano successiva tra 12 e 36 ore.',
     'Si diluisce con acqua.'] }],
   [/^ZATTER[AE]\b/, { fonte: 'scadenzario nautico e centri di revisione autorizzati', dati: [
-    'Molte zattere da diporto prevedono il controllo in centro autorizzato ogni 2 anni, con revisione speciale ogni 5 anni; l\'intervallo esatto del modello è quello indicato dal produttore e sull\'etichetta.',
-    'Per alcune zattere entro le 12 miglia la prima revisione può essere prevista a 36 mesi: fa fede quanto indicato dal produttore sulla zattera.'] }],
+    'La revisione si fa in un centro autorizzato, alle scadenze indicate dal produttore sulla zattera e sull\'etichetta.'] }],
   [/^(FUOCHI|RAZZ|SEGNALI DI SOCCORSO)|FUMOGEN/, { fonte: 'scadenzario delle dotazioni di sicurezza da diporto', dati: [
-    'I segnali pirotecnici hanno una validità indicata sulla confezione, in genere di alcuni anni dalla fabbricazione (comunemente 4): alla scadenza non valgono più come dotazione.',
+    'I segnali pirotecnici hanno una validità indicata sulla confezione: alla scadenza non valgono più come dotazione.',
     'I segnali scaduti non si buttano nei rifiuti: si consegnano secondo le indicazioni locali.'] }],
   [/^ESTINTOR[EI]\b/, { fonte: 'scadenzario delle dotazioni di sicurezza da diporto', dati: [
-    'Gli estintori nautici non hanno una scadenza fissa: devono essere integri, con manometro in zona di carica, altrimenti vanno revisionati da una ditta specializzata.'] }],
+    'Gli estintori devono essere integri, con il manometro in zona di carica; per controlli e revisione valgono le indicazioni del produttore riportate sull\'estintore.'] }],
 ];
 // Lines a reviewer found not matching the producer sheet attached to the same article: removed, never guessed
 const PROD_DROP = [
@@ -4337,6 +4336,7 @@ function explain(i) {
   o.dati = [];
   for (const [re, lab] of DATI) {
     const m = o.desc.match(re); if (!m || o.dati.some(x => x.startsWith(lab))) continue;
+    if (lab === 'Tensione') { const vv = (o.desc + ' ' + r.f.map(([k, v]) => v).join(' ')).match(/\d+(?:[.,]\d+)?\s?(?:\/\s?\d+(?:[.,]\d+)?\s?)?V(?:olt|dc|ac)?\b/gi) || []; const un = new Set(vv.map(x => x.replace(/\s|olt|dc|ac/gi, '').toUpperCase())); if (un.size !== 1 || /\//.test([...un][0])) continue; }  // lancio34
     const v = m[0].trim().replace(new RegExp('^' + lab + '\\s*:?\\s*', 'i'), '').replace(/^(teorica|di)\s+/i, '');
     o.dati.push(lab + ': ' + cap(v));
   }
@@ -4354,7 +4354,8 @@ function explain(i) {
   if (!o.scheda) o.scheda = SCH_CODE[r.c] || SCH_CODE[r.c.slice(0, 6)] || '';
   if (!o.scheda) { const sc = SCHEDE.find(([re, rx]) => re.test(NAME) && (!rx || rx.test(ROW))); o.scheda = sc ? sc[2] : ''; }
   o.scheda = o.scheda || '';
-  o.mats = []; for (const [re, t] of MATS) { if (!o.mats.length && re.test(NAME)) o.mats.push(t); }
+  o.mats = []; const noMat = (/^28/.test(r.c) && /ALLUMINI|ZINCO|MAGNESIO/.test(NAME)) || /\bANOD[OI]\b|\bPER (ACCIAIO|INOX|ALLUMINIO|TEAK|NEOPRENE|LEGNO|GOMMA|PVC|OTTONE|BRONZO)|PULIT|DETERG|KLEEN|CLEANER|SMACCHIA|TEAK ?(OIL|SEALER|PROTECT)|MAGIC TEAK|\bOLIO\b|\bCOLLA\b|\bSTUCCO\b|^RESINA\b|\bDISCHI\b|\bMASCHI\b|TAGLIATUB/.test(NAME);
+  if (!noMat) for (const [re, t] of MATS) { if (!o.mats.length && re.test(NAME)) o.mats.push(t); }
   const sib = INDEX.rows.filter(x => x.b === r.b && r.b >= 0);
   o.varianti = sib.length;
   o.variantiCol = (b.h || []).filter((h, k) => k > 0 && !SKIP_COL.test(h)).join(', ');
@@ -4602,7 +4603,7 @@ async function openSheet(url, name, code) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fn;
       document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     }; }
-    const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
     msg.remove();
     const w = Math.min(box.clientWidth || 700, 900), dpr = Math.min(window.devicePixelRatio || 1, 2);
     for (let p = 1; p <= doc.numPages && !gone; p++) {
@@ -5153,7 +5154,9 @@ window.__nvSugg = { codeSugg, textSugg, wordFix };
 
 
 // ---------------------------------------------------------------- lista (dipendenti: per il cliente; clienti: lista dei desideri)
-const LKEY = 'listaCliente';
+const LKEY = CLI ? 'listaClienteC' : 'listaCliente';
+// lancio34: customer apps keep the list they had (prices and discounts dropped); never on the shared github.io site
+if (CLI) try { if (localStorage.getItem(LKEY) == null && location.hostname !== 'serginolimoncino.github.io') { const v0 = JSON.parse(localStorage.getItem('listaCliente') || 'null'); if (v0 && Array.isArray(v0.items)) localStorage.setItem(LKEY, JSON.stringify({ items: v0.items.map(x => ({ c: x && x.c, q: x && x.q, p: null })), cliente: '', note: typeof v0.note === 'string' ? v0.note : '' })); } } catch (e) {}
 const LTITLE = CLI ? 'Lista dei desideri' : 'Lista per il cliente';
 const lget = () => {
   let v = null; try { v = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) {}
