@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b52b8">
+<title>Battagli Marine Hardware – Scarica l'app</title>
+<meta name="description" content="Catalogo codici Battagli Marine Hardware: scarica l'app per Android, iPhone e PC.">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../icon-180.png">
+<link rel="stylesheet" href="../fonts.css">
+<style>
+:root { --blue: #0b52b8; --blue2: #1f6fe0; --ink: #0f1b2d; --muted: #5b6b80; --line: #dde6f2; --bg: #fff; --page: #f3f7fc; --soft: #e8f0fc; }
+@media (prefers-color-scheme: dark) { :root { --ink: #eef3fa; --muted: #9fb0c6; --line: #24354d; --bg: #111c2c; --page: #0a1220; --soft: #16294a; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.hero { background: radial-gradient(120% 90% at 10% 0%, #2a7cf0 0%, #0b52b8 55%, #083f8f 100%); color: #fff; padding: 28px 16px 120px; }
+.wrap { max-width: 980px; margin: 0 auto; }
+.brand { display: inline-flex; align-items: center; gap: 10px; background: #fff; color: #10233f; border-radius: 16px; padding: 9px 16px 9px 10px; font-weight: 800; font-size: 17px; box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.brand span { color: var(--blue2); font-weight: 600; }
+h1 { font-size: clamp(30px, 6vw, 46px); line-height: 1.08; margin: 26px 0 10px; letter-spacing: -.5px; }
+.lead { font-size: 17px; opacity: .92; max-width: 560px; margin: 0; }
+.main { margin-top: -92px; padding: 0 16px 40px; }
+.card { background: var(--bg); border-radius: 24px; box-shadow: 0 14px 40px rgba(11,40,90,.14); padding: 22px; }
+.pick { display: grid; gap: 14px; }
+.you { font-size: 13px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--blue2); margin: 0; }
+.big { display: flex; align-items: center; gap: 14px; text-decoration: none; background: var(--blue); color: #fff; border-radius: 18px; padding: 16px 18px; font-weight: 800; font-size: 18px; box-shadow: 0 8px 22px rgba(11,82,184,.35); transition: transform .12s; }
+.big:active { transform: scale(.98); }
+.big svg { width: 30px; height: 30px; flex: none; }
+.big small { display: block; font-weight: 600; font-size: 13.5px; opacity: .85; }
+.steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+.steps li { margin: 3px 0; }
+.steps b { color: var(--ink); }
+.others { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.others p { grid-column: 1 / -1; margin: 0; font-size: 14px; color: var(--muted); font-weight: 600; }
+.alt { display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; border-radius: 16px; padding: 14px 8px; background: var(--soft); color: var(--blue2); font-weight: 800; font-size: 14.5px; text-align: center; border: 0; cursor: pointer; font-family: inherit; }
+.alt svg { width: 26px; height: 26px; }
+.alt.on { outline: 2px solid var(--blue2); }
+.try { display: block; text-align: center; margin-top: 14px; font-weight: 700; color: var(--blue2); text-decoration: none; font-size: 15px; }
+h2 { font-size: 24px; margin: 36px 4px 6px; letter-spacing: -.3px; }
+.sub { color: var(--muted); margin: 0 4px 18px; }
+.shots { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 4px 14px; }
+.shots figure { margin: 0; scroll-snap-align: start; }
+.shots img { width: 100%; border-radius: 22px; box-shadow: 0 10px 28px rgba(11,40,90,.16); border: 1px solid var(--line); display: block; }
+.shots figcaption { font-size: 14px; font-weight: 700; margin-top: 10px; text-align: center; }
+.feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.f { background: var(--bg); border-radius: 18px; padding: 16px; border: 1px solid var(--line); }
+.f b { display: block; font-size: 16px; margin-bottom: 3px; }
+.f span { color: var(--muted); font-size: 14.5px; }
+footer { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 16px 36px; }
+@media (min-width: 760px) { .card { padding: 30px; } .pick { grid-template-columns: 1.1fr 1fr; align-items: center; column-gap: 28px; } .pick .you, .pick .big { grid-column: 1; } .pick .steps { grid-column: 2; grid-row: 1 / span 2; } }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="brand"><img src="../icon-192.png" alt="">Battagli <span>Marine Hardware</span></div>
+    <h1>Il catalogo codici,<br>sempre in tasca.</h1>
+    <p class="lead">Scrivi o detta un codice e trovi subito l'articolo, con foto e prezzo. Funziona anche senza internet.</p>
+  </div>
+</header>
+
+<main class="main">
+  <div class="wrap">
+    <section class="card">
+      <div class="pick" id="pick"></div>
+      <div class="others" id="others"><p>Oppure scegli un altro dispositivo</p></div>
+      <a class="try" href="../">Provala subito nel browser →</a>
+    </section>
+
+    <h2>Com'è fatta</h2>
+    <p class="sub">Scorri le immagini.</p>
+    <div class="shots">
+      <figure><img src="s1.jpg" alt="Pagina iniziale con ricerca per codice e descrizione" loading="lazy"><figcaption>Cerca per codice o descrizione</figcaption></figure>
+      <figure><img src="s2.jpg" alt="Risultati della ricerca divisi per reparto" loading="lazy"><figcaption>Risultati divisi per reparto</figcaption></figure>
+      <figure><img src="s3.jpg" alt="Scheda articolo con foto, codice e descrizione" loading="lazy"><figcaption>Scheda articolo con foto</figcaption></figure>
+    </div>
+
+    <h2>Cosa sa fare</h2>
+    <div class="feat">
+      <div class="f"><b>Ricerca veloce</b><span>Codice con o senza punti, descrizione, anche con errori di battitura.</span></div>
+      <div class="f"><b>Ricerca a voce</b><span>Tocca il microfono, detta il codice e la ricerca parte da sola.</span></div>
+      <div class="f"><b>Cerca con una foto</b><span>Inquadri la scatola o l'articolo e trova il codice.</span></div>
+      <div class="f"><b>Condividi un articolo</b><span>Mandi codice e foto a chi vuoi, con un tocco.</span></div>
+      <div class="f"><b>Preferiti e reparti</b><span>Gli articoli che usi di più, sempre a portata di mano.</span></div>
+      <div class="f"><b>Aggiornamenti con un tocco</b><span>Quando c'è una novità, l'app te lo dice.</span></div>
+    </div>
+  </div>
+</main>
+<footer>Battagli Marine Hardware</footer>
+
+<script>
+(function () {
+  var ICON = {
+    android: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>',
+    iphone: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.28-1.6 2.78-.41 6.9 1.15 9.15.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.41-3.65zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.1 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28z"/></svg>',
+    pc: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.1l7.4-1v7.2H3V5.1zm0 13.8l7.4 1v-7.1H3v6.1zm8.2 1.1L21 21.4V12.8h-9.8V20zm0-15.9v7.2H21V2.6l-9.8 1.5z"/></svg>'
+  };
+  var D = {
+    android: { name: 'Android', label: 'Scarica per Android', small: 'Tutti i telefoni Android · circa 35 MB', href: '../app/Battagli-Marine-Hardware.apk', dl: true,
+      steps: ['Tocca <b>Scarica per Android</b> e aspetta che finisca.', 'Apri il file <b>Battagli-Marine-Hardware.apk</b> dalle notifiche o dalla cartella Download.', 'Se il telefono lo chiede, tocca <b>Impostazioni → Consenti da questa fonte</b>, poi <b>Installa</b>.', 'Alla prima apertura il catalogo si scarica da solo (serve internet qualche minuto).'] },
+    iphone: { name: 'iPhone', label: 'Apri su iPhone', small: 'iPhone e iPad · con Safari', href: '../',
+      steps: ['Tocca <b>Apri su iPhone</b> (usa <b>Safari</b>).', 'Tocca il tasto <b>Condividi</b> (quadrato con la freccia in su).', 'Scegli <b>Aggiungi alla schermata Home</b>, poi <b>Aggiungi</b>.', 'Apri l\'app dall\'icona Battagli: il catalogo si carica da solo la prima volta.'] },
+    pc: { name: 'PC Windows', label: 'Scarica per PC', small: 'Windows 10 e 11 · circa 100 MB', href: '../app/Battagli-PC-Windows.zip', dl: true,
+      steps: ['Clicca <b>Scarica per PC</b>.', 'Apri il file scaricato e <b>estrai tutto</b> in una cartella.', 'Apri <b>Battagli Catalogo</b>.', 'Se compare l\'avviso blu di Windows: <b>Ulteriori informazioni → Esegui comunque</b>.'] }
+  };
+  var ua = navigator.userAgent || '';
+  var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var cur = /Android/i.test(ua) ? 'android' : ios ? 'iphone' : /Windows/i.test(ua) ? 'pc' : null;
+  var pick = document.getElementById('pick'), others = document.getElementById('others');
+  function show(k) {
+    var d = D[k];
+    pick.innerHTML = '<p class="you">' + (k === cur ? 'Per il tuo ' + d.name : d.name) + '</p>'
+      + '<a class="big" href="' + d.href + '"' + (d.dl ? ' download' : '') + '>' + ICON[k] + '<span>' + d.label + '<small>' + d.small + '</small></span></a>'
+      + '<ol class="steps">' + d.steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol>';
+    [].forEach.call(others.querySelectorAll('.alt'), function (b) { b.classList.toggle('on', b.dataset.k === k); });
+  }
+  ['android', 'iphone', 'pc'].forEach(function (k) {
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'alt'; b.dataset.k = k;
+    b.innerHTML = ICON[k] + D[k].name; b.onclick = function () { show(k); pick.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    others.appendChild(b);
+  });
+  if (!cur) { pick.innerHTML = '<p class="you">Scegli il tuo dispositivo</p><p class="steps" style="padding:0">Su Mac o altri computer puoi usarla subito nel browser, qui sotto.</p>'; }
+  else show(cur);
+})();
+</script>
+</body>
+</html>
