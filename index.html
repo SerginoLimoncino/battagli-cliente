@@ -3126,7 +3126,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 27, APP_ED = 'cliente', APP_PF = 'web', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 29, APP_ED = 'cliente', APP_PF = 'web', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -4953,6 +4953,13 @@ css.textContent = `
 .nv-sugg .item { color: var(--ink); text-align: left; }
 .nv-sugg .item .thumb { width: 64px; height: 64px; flex: none; }
 @media (max-width: 440px) { .nv-sugg .item .pg { display: none; } }
+body.nv-off-tabCam #tabCam, body.nv-off-micBtn #micBtn { display: none !important; }
+
+body[class*="nv-off-"] .tabbar .in { display: flex; gap: 2px; }
+body[class*="nv-off-"] .tabbar .tab { flex: 1 1 0; }
+.nv-togs { display: grid; gap: 8px; }
+.nv-tog { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--bg); border-radius: 14px; box-shadow: var(--card-shadow); padding: 12px 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.nv-tog input { width: 24px; height: 24px; flex: none; accent-color: var(--blue); }
 
 `;
 document.head.appendChild(css);
@@ -5245,6 +5252,27 @@ document.addEventListener('click', e => {
 window.__nvSugg = { codeSugg, textSugg, wordFix };
 
 
+
+// Settings: each person chooses which sections stay in the bottom bar (kept on this device, updates do not change it)
+(function tabChoice() {
+  const ALL = [['micBtn', 'Microfono (ricerca a voce)'], ['tabCam', 'Cerca foto']];  // the customer copy only has Cerca foto
+  const here = ALL.filter(([id]) => { const el = $$(id); return el && getComputedStyle(el).display !== 'none'; });
+  const set = $$('viewSettings'), share = $$('shareSec');
+  if (!here.length || !set) return;
+  const get = () => { try { const v = JSON.parse(localStorage.getItem('nvTabsOff') || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch (e) { return []; } };
+  const apply = off => { for (const [id] of ALL) document.body.classList.toggle('nv-off-' + id, off.includes(id) && here.some(h => h[0] === id)); };
+  apply(get());
+  const sec = document.createElement('section'); sec.id = 'tabsSec';
+  sec.innerHTML = '<div class="block-h"><h2>Cosa vuoi vedere</h2></div><div class="nv-togs">' + here.map(([id, name]) => '<label class="nv-tog"><span>' + name + '</span><input type="checkbox" data-tab="' + id + '"' + (get().includes(id) ? '' : ' checked') + '></label>').join('') + '</div><p class="note" style="margin-top:8px">Togli quello che non usi: puoi rimetterlo quando vuoi.</p>';
+  const main = set.querySelector('main') || set;
+  if (share && share.parentNode === main) main.insertBefore(sec, share); else main.appendChild(sec);
+  sec.addEventListener('change', e => {
+    const t = e.target.closest('input[data-tab]'); if (!t) return;
+    const off = get().filter(x => x !== t.dataset.tab); if (!t.checked) off.push(t.dataset.tab);
+    try { localStorage.setItem('nvTabsOff', JSON.stringify(off)); } catch (err) {}
+    apply(off);
+  });
+})();
 })();
 
 </script></body></html>
