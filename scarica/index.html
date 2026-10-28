@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#0b52b8">
 <title>Battagli Marine Hardware – Scarica l'app</title>
 <meta name="description" content="Catalogo codici Battagli Marine Hardware: scarica l'app per Android, iPhone e PC.">
-<link rel="icon" href="../icon-192.png">
-<link rel="apple-touch-icon" href="../icon-180.png">
-<link rel="stylesheet" href="../fonts.css">
+<link rel="icon" href="https://serginolimoncino.github.io/battagli-cliente/icon-192.png">
+<link rel="apple-touch-icon" href="https://serginolimoncino.github.io/battagli-cliente/icon-180.png">
+<link rel="stylesheet" href="https://serginolimoncino.github.io/battagli-cliente/fonts.css">
 <style>
 :root { --blue: #0b52b8; --blue2: #1f6fe0; --ink: #0f1b2d; --muted: #5b6b80; --line: #dde6f2; --bg: #fff; --page: #f3f7fc; --soft: #e8f0fc; }
 @media (prefers-color-scheme: dark) { :root { --ink: #eef3fa; --muted: #9fb0c6; --line: #24354d; --bg: #111c2c; --page: #0a1220; --soft: #16294a; } }
@@ -52,31 +52,49 @@ h2 { font-size: 24px; margin: 36px 4px 6px; letter-spacing: -.3px; }
 .f span { color: var(--muted); font-size: 14.5px; }
 footer { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 16px 36px; }
 @media (min-width: 760px) { .card { padding: 30px; } .pick { grid-template-columns: 1.1fr 1fr; align-items: center; column-gap: 28px; } .pick .you, .pick .big { grid-column: 1; } .pick .steps { grid-column: 2; grid-row: 1 / span 2; } }
+.pinbox { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.pinbox summary { cursor: pointer; font-weight: 700; color: var(--muted); font-size: 15px; list-style: none; }
+.pinbox summary::-webkit-details-marker { display: none; }
+.pinbox summary::before { content: "\1F512  "; }
+.pinrow { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.pinrow input { flex: 1 1 140px; min-width: 0; font: inherit; font-size: 20px; letter-spacing: 6px; text-align: center; padding: 12px; border-radius: 14px; border: 2px solid var(--line); background: var(--page); color: var(--ink); }
+.pinrow input:focus { outline: none; border-color: var(--blue2); }
+.pinrow button { font: inherit; font-weight: 800; font-size: 16px; border: 0; border-radius: 14px; padding: 12px 20px; background: var(--blue); color: #fff; cursor: pointer; }
+.pinmsg { min-height: 20px; margin: 8px 2px 0; font-size: 14px; font-weight: 700; color: #c0392b; }
+.badge { display: none; margin: 0 0 14px; padding: 10px 14px; border-radius: 14px; background: #e6f6ec; color: #17663a; font-weight: 800; font-size: 15px; }
+.emp .badge { display: block; }
+.emp .pinbox { display: none; }
+@media (prefers-color-scheme: dark) { .badge { background: #123a24; color: #9fe0b7; } }
 </style>
 </head>
 <body>
 <header class="hero">
   <div class="wrap">
-    <div class="brand"><img src="../icon-192.png" alt="">Battagli <span>Marine Hardware</span></div>
+    <div class="brand"><img src="https://serginolimoncino.github.io/battagli-cliente/icon-192.png" alt="">Battagli <span>Marine Hardware</span></div>
     <h1>Il catalogo codici,<br>sempre in tasca.</h1>
-    <p class="lead">Scrivi o detta un codice e trovi subito l'articolo, con foto e prezzo. Funziona anche senza internet.</p>
+    <p class="lead">Scrivi o detta un codice e trovi subito l'articolo, con foto e descrizione. Funziona anche senza internet.</p>
   </div>
 </header>
 
 <main class="main">
   <div class="wrap">
     <section class="card">
+      <p class="badge" id="badge">Versione dipendenti sbloccata</p>
       <div class="pick" id="pick"></div>
       <div class="others" id="others"><p>Oppure scegli un altro dispositivo</p></div>
-      <a class="try" href="../">Provala subito nel browser →</a>
+      <a class="try" id="try" href="https://serginolimoncino.github.io/battagli-cliente/">Provala subito nel browser →</a>
+      <details class="pinbox" id="pinbox"><summary>Sei un dipendente Battagli? Inserisci il PIN</summary>
+        <form class="pinrow" id="pinform"><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" aria-label="PIN dipendenti"><button type="submit">Sblocca</button></form>
+        <p class="pinmsg" id="pinmsg"></p>
+      </details>
     </section>
 
     <h2>Com'è fatta</h2>
     <p class="sub">Scorri le immagini.</p>
     <div class="shots">
-      <figure><img src="s1.jpg" alt="Pagina iniziale con ricerca per codice e descrizione" loading="lazy"><figcaption>Cerca per codice o descrizione</figcaption></figure>
-      <figure><img src="s2.jpg" alt="Risultati della ricerca divisi per reparto" loading="lazy"><figcaption>Risultati divisi per reparto</figcaption></figure>
-      <figure><img src="s3.jpg" alt="Scheda articolo con foto, codice e descrizione" loading="lazy"><figcaption>Scheda articolo con foto</figcaption></figure>
+      <figure><img src="https://serginolimoncino.github.io/battagli-cliente/scarica/s1.jpg" alt="Pagina iniziale con ricerca per codice e descrizione" loading="lazy"><figcaption>Cerca per codice o descrizione</figcaption></figure>
+      <figure><img src="https://serginolimoncino.github.io/battagli-cliente/scarica/s2.jpg" alt="Risultati della ricerca divisi per reparto" loading="lazy"><figcaption>Risultati divisi per reparto</figcaption></figure>
+      <figure><img src="https://serginolimoncino.github.io/battagli-cliente/scarica/s3.jpg" alt="Scheda articolo con foto, codice e descrizione" loading="lazy"><figcaption>Scheda articolo con foto</figcaption></figure>
     </div>
 
     <h2>Cosa sa fare</h2>
@@ -100,11 +118,11 @@ footer { text-align: center; color: var(--muted); font-size: 13px; padding: 28px
     pc: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.1l7.4-1v7.2H3V5.1zm0 13.8l7.4 1v-7.1H3v6.1zm8.2 1.1L21 21.4V12.8h-9.8V20zm0-15.9v7.2H21V2.6l-9.8 1.5z"/></svg>'
   };
   var D = {
-    android: { name: 'Android', label: 'Scarica per Android', small: 'Tutti i telefoni Android · circa 35 MB', href: '../app/Battagli-Marine-Hardware.apk', dl: true,
+    android: { name: 'Android', label: 'Scarica per Android', small: 'Tutti i telefoni Android · circa 35 MB', href: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-Marine-Hardware.apk', dl: true,
       steps: ['Tocca <b>Scarica per Android</b> e aspetta che finisca.', 'Apri il file <b>Battagli-Marine-Hardware.apk</b> dalle notifiche o dalla cartella Download.', 'Se il telefono lo chiede, tocca <b>Impostazioni → Consenti da questa fonte</b>, poi <b>Installa</b>.', 'Alla prima apertura il catalogo si scarica da solo (serve internet qualche minuto).'] },
-    iphone: { name: 'iPhone', label: 'Apri su iPhone', small: 'iPhone e iPad · con Safari', href: '../',
+    iphone: { name: 'iPhone', label: 'Apri su iPhone', small: 'iPhone e iPad · con Safari', href: 'https://serginolimoncino.github.io/battagli-cliente/',
       steps: ['Tocca <b>Apri su iPhone</b> (usa <b>Safari</b>).', 'Tocca il tasto <b>Condividi</b> (quadrato con la freccia in su).', 'Scegli <b>Aggiungi alla schermata Home</b>, poi <b>Aggiungi</b>.', 'Apri l\'app dall\'icona Battagli: il catalogo si carica da solo la prima volta.'] },
-    pc: { name: 'PC Windows', label: 'Scarica per PC', small: 'Windows 10 e 11 · circa 100 MB', href: '../app/Battagli-PC-Windows.zip', dl: true,
+    pc: { name: 'PC Windows', label: 'Scarica per PC', small: 'Windows 10 e 11 · circa 100 MB', href: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-PC-Windows.zip', dl: true,
       steps: ['Clicca <b>Scarica per PC</b>.', 'Apri il file scaricato e <b>estrai tutto</b> in una cartella.', 'Apri <b>Battagli Catalogo</b>.', 'Se compare l\'avviso blu di Windows: <b>Ulteriori informazioni → Esegui comunque</b>.'] }
   };
   var ua = navigator.userAgent || '';
@@ -123,8 +141,55 @@ footer { text-align: center; color: var(--muted); font-size: 13px; padding: 28px
     b.innerHTML = ICON[k] + D[k].name; b.onclick = function () { show(k); pick.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     others.appendChild(b);
   });
+  window.__dl = { D: D, show: show, cur: function () { var o = others.querySelector('.alt.on'); return o ? o.dataset.k : cur; } };
   if (!cur) { pick.innerHTML = '<p class="you">Scegli il tuo dispositivo</p><p class="steps" style="padding:0">Su Mac o altri computer puoi usarla subito nel browser, qui sotto.</p>'; }
   else show(cur);
+})();
+</script>
+<script>
+(function () {
+  var LOCK = {"s": "HdOzjYlhPNIWswXJHakUdg==", "i": "Ter4Nk/dpt6Ql7+u", "c": "mY+T6bWf6w+cCRsBYqdYuBeTxooBLI60wYzXntFCeIyw9aQOdCQnIofUWHeWgmRovpSc4aRyJcGKPWCyRz3rzhpvTf4pJqmPuI0YpBkZQ+ea/CPYW2Hz6Qz+u+ZpXWICTNpQS6QpkR8aZ1kN0v1WkXwy50rUE/yuKePY+f54EyPR+boKm6aqjcDuUInpDFC38RU0UAfwrPvrDbWUq7sei5IIWhbrS/tO6bfuDFBcN/TPGIZEcp9O6eQhb6nCGN6bBlYaOEsU2Gx2K2UyeR5GAeM2TtMxdpL8zvYZqxjbzAM3L1FdoC5QvlZ6BSCjlaUwDo8QtV3RSr6Qh3/4+0gIePljWgMs2CEtYjGySwCo1lRuIemNU0ycxH1eG63laNI67OWjngtlUjqUBHn5WCmu1zd8p79f1GdyRDJ7LgpsdL50Nusuv6GMAm6yB+7+cvjyQr0BVrfTvXzX1Xz1bvjUNUSV9io6hLUjVL0OAp6ETLJtuWiRY9+jf+ddKIAgTGrn9GM6mUTeCZZIoFOftpvCgfe4rClHEUa4cxbvSNU4SDFAsYsXra7foY4Qx/1l7xBlb4EgiBh4C0chU/iJZI9BcAa57er+14fUzPZ1Ii6T5kLsDf8MTFMEFurmgYuFxy8q3fpLQJIsNu+zww5d2NE+gS09hzFtgTxNtSdsZbvdfA2yOWbQ/vcMzR6cI6j5KKJgpeQV/eRlzEfaeas6u02+0kpiqNLcS6diDhsH63xpu+OoPWXGrFXhu8rheHoZXLvzSe6m0QWlMpsRDB/78kG5n19ySoZfpbWV1wve7SdJYpogPxhIBW7S6CMexeHFO9grzpfVmUBHXpVnGbQlcfvwxhcyEf4QN8iZp8bk7JHwus+PlgmGgJp1Ms8UhA==", "n": 300000};
+  var form = document.getElementById('pinform'), inp = document.getElementById('pin'), msg = document.getElementById('pinmsg');
+  var wrong = 0, wait = 0;
+  function u8(s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); }
+  function open(pin) {
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey'])
+      .then(function (k) { return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: u8(LOCK.s), iterations: LOCK.n, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['decrypt']); })
+      .then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(LOCK.i) }, k, u8(LOCK.c)); })
+      .then(function (b) { return JSON.parse(new TextDecoder().decode(b)); });
+  }
+  function unlock(p) {
+    var dl = window.__dl, D = dl.D;
+    D.android.href = p.android; D.android.label = 'Scarica per Android'; D.android.small = 'Copia dipendenti · tutti i telefoni Android';
+    D.android.steps[1] = 'Apri il file scaricato dalle notifiche o dalla cartella Download.';
+    D.pc.href = p.pc; D.pc.small = 'Copia dipendenti · Windows 10 e 11';
+    D.iphone.href = p.web; D.iphone.small = 'Copia dipendenti · con Safari';
+    document.getElementById('try').href = p.web;
+    document.body.classList.add('emp');
+    var lead = document.querySelector('.lead'); if (lead) lead.textContent = lead.textContent.replace('con foto e descrizione', 'con foto e prezzo');
+    var shots = document.querySelector('.shots');
+    if (shots && p.shot) { var f = document.createElement('figure'); f.innerHTML = '<img src="' + p.shot + '" alt="Lista per il cliente con sconti" loading="lazy"><figcaption>Lista con sconti</figcaption>'; shots.appendChild(f); }
+    var feat = document.querySelector('.feat');
+    (p.feat || []).forEach(function (x) { var d = document.createElement('div'); d.className = 'f'; d.innerHTML = '<b></b><span></span>'; d.firstChild.textContent = x[0]; d.lastChild.textContent = x[1]; feat.appendChild(d); });
+    dl.show(dl.cur() || 'android');
+  }
+  form.onsubmit = function (e) {
+    e.preventDefault();
+    var pin = inp.value.trim();
+    if (!pin) return;
+    if (Date.now() < wait) { msg.textContent = 'Troppi tentativi. Riprova tra poco.'; return; }
+    if (!window.crypto || !crypto.subtle) { msg.textContent = 'Questo browser non può sbloccare. Prova con Chrome o Safari.'; return; }
+    msg.style.color = 'var(--muted)'; msg.textContent = 'Controllo…';
+    open(pin).then(function (p) {
+      msg.textContent = ''; unlock(p);
+      document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, function () {
+      wrong++; inp.value = ''; msg.style.color = '';
+      if (wrong >= 5) { wait = Date.now() + 30000 * (wrong - 4); msg.textContent = 'PIN sbagliato. Troppi tentativi, aspetta un momento.'; }
+      else msg.textContent = 'PIN sbagliato.';
+    });
+  };
 })();
 </script>
 </body>
