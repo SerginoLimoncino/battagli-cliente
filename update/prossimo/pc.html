@@ -1,4 +1,11 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+<!doctype html>
+<!--
+  Battagli Marine Hardware - Catalogo Codici
+  Autore e creatore originale: Sergio Tassoni
+  Copyright (c) 2026 Sergio Tassoni. Tutti i diritti riservati.
+  firma-autore-st
+-->
+<html lang="it"><head><meta charset="utf-8"><meta name="author" content="Sergio Tassoni"><meta name="copyright" content="(c) 2026 Sergio Tassoni"><meta name="generator" content="Catalogo Battagli di Sergio Tassoni"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
 /* list edit mode */
 .numedit { margin-top: 2px; }
 .numedit[aria-pressed="true"] { background: var(--ok); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
@@ -714,7 +721,9 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
 <div class="zoomimg" id="zoomImg" hidden><img alt=""><button class="zx" type="button" id="zoomX" aria-label="Chiudi">×</button><span class="zh">Pizzica per ingrandire · doppio tocco</span></div>
 <div class="dropall" id="dropall" hidden><div>Rilascia per caricare il catalogo<small>Il catalogo vecchio verrà sostituito da quello nuovo</small></div></div>
 
-<script>
+<script>/*! Battagli Catalogo Codici - (c) 2026 Sergio Tassoni - autore originale. firma-autore-st */
+;(function(){try{var a={nome:"Sergio Tassoni",b64:"U2VyZ2lvIFRhc3Nvbmk=",c:[83,101,114,103,105,111,32,84,97,115,115,111,110,105],anno:2026,nota:"Autore e creatore originale dell'app"};Object.defineProperty(window,"__autore",{value:Object.freeze(a),enumerable:false});}catch(e){}})();
+
 // a code printed twice (a mention, then its table): the row with the price and data, like search
 let BEST = null, BEST_AT = null;
 function bestRow(c) {
@@ -2663,7 +2672,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 32, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 33, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -4781,6 +4790,9 @@ body[class*="nv-off-"] .tabbar .tab { flex: 1 1 0; }
 .nv-gone .g { display: flex; align-items: center; justify-content: space-between; font-family: var(--f-code); font-weight: 600; color: var(--muted); }
 .nv-gone .g .x { border: 0; background: var(--blue-soft); color: var(--blue); border-radius: 999px; width: 32px; height: 32px; font-weight: 800; }
 .nv-sbar { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+/* the list never wider than the screen (Sergio 28-10-2026: it slid sideways with a saved list open) */
+#listBody { grid-template-columns: minmax(0, 1fr); }
+#listSheet { overflow-x: hidden; }
 .nv-sbar .cur { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--ink); overflow: hidden; }
 .nv-sbar .cur span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nv-sbar .cur small { color: var(--muted); font-weight: 600; font-size: 13px; }
