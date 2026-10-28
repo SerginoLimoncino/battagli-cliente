@@ -1005,7 +1005,8 @@ let currentRow = null;
 
 // ---------- local storage (IndexedDB) ----------
 let idbP = null;
-const DBN = n => APP_ED === 'cliente' && /github\.io$/.test(location.hostname) ? n + '-clienti' : n;
+// (by address, not APP_ED: the databases are opened while the script is still running, before APP_ED exists)
+const DBN = n => /github\.io$/.test(location.hostname) && /^\/battagli-cliente\//.test(location.pathname) ? n + '-clienti' : n;
 function idb() {
   if (!idbP) idbP = new Promise((res, rej) => {
     try {
@@ -2396,7 +2397,7 @@ async function siteCatalog() {
     await idbSet('pdfKey', back && cur ? cur.at || 0 : 0);
     if (cur && !cur.example) { await idbDel('indexPrev'); await idbDel('pdfPrev'); await idbDel('pdfKeyPrev'); }
     lsSet('catSkip', info.at); lsSet('catSkipT', Date.now() - 3 * 864e5 + 6 * 36e5);
-    overlay(false); toast('Memoria del telefono piena: libera spazio, riproverò a scaricare il catalogo nuovo tra qualche ora'); return false;
+    overlay(false); toast('Memoria piena: libera spazio sul dispositivo, poi riprovo a scaricare il catalogo'); return false;
   }
   await idbSet('pdfKey', idx.at); await idbSet('meta', {});
   if (vj) {
@@ -2417,10 +2418,19 @@ async function siteCatalog() {
   // 1793206457477 = first customer catalogue without prices, saved before it carried ed: 'cliente'
   const cliCat = c => c && (c.ed === 'cliente' || c.at === 1793206457477);
   try { await 0;  // APP_ED is declared further down the script
-    if (APP_ED !== 'cliente') {
-    if (cliCat(await idbGet('index'))) for (const k of ['index', 'pdf', 'pdfKey', 'meta', 'pre', 'vismeta']) await idbDel(k);
-    if (cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
-    }
+    const cur = APP_ED !== 'cliente' ? await idbGet('index') : null, none = !(cur && cur.rows && cur.rows.length && !cur.example);
+    if (APP_ED !== 'cliente' && (cliCat(cur) || none) && (cliCat(cur) || (await idbGet('indexPrev')))) {
+      // the employee catalogue was kept as "catalogo precedente" (also after a download that did not fit):
+      // put it back, nothing to download and no room needed
+      const pv = await idbGet('indexPrev'), pp = pv && pv.rows && !cliCat(pv) ? await idbGet('pdfPrev') : null;
+      if (pp) {
+        await idbSet('pdf', pp); await idbSet('pdfKey', (await idbGet('pdfKeyPrev')) || pv.at); await idbSet('index', pv);
+        const vm = await idbGet('vismeta'); if (vm) await idbSet('vismeta', Object.assign({}, vm, { at: pv.at }));  // same photos in both copies
+        for (const k of ['meta', 'pre']) await idbDel(k);
+        for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+      } else if (cliCat(cur)) for (const k of ['index', 'pdf', 'pdfKey', 'meta', 'pre']) await idbDel(k);
+      if (cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+    } else if (APP_ED !== 'cliente' && cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
   } catch (e) {}
   let hasCat = false; try { const c = await idbGet('index'); hasCat = !!(c && c.rows && c.rows.length && !c.example); } catch (e) {}
   const catFail = () => { overlay(false); toast('Download del catalogo non riuscito: riprovo alla prossima apertura'); };
