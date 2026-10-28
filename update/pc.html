@@ -2597,7 +2597,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 29, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 30, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -4409,7 +4409,8 @@ const css = document.createElement('style');
 css.textContent = `
 .micbtn { color: var(--blue); }
 .micbtn svg { width: 22px; height: 22px; }
-.micbtn[aria-pressed="true"] { color: #fff; background: var(--red, #d33); border-radius: 999px; }
+.micbtn[aria-pressed="true"] { color: #fff; background: var(--blue); border-radius: 999px; animation: nvMic 1.1s ease-in-out infinite; }
+@keyframes nvMic { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 55%, transparent); opacity: 1; } 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--blue) 0%, transparent); opacity: .72; } }
 .nv-voice { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--bg); box-shadow: var(--card-shadow); font-size: 14px; color: var(--ink); }
 .nv-voice i { width: 10px; height: 10px; border-radius: 50%; background: var(--red, #d33); flex: none; animation: nvpulse 1s ease-in-out infinite; }
 .nv-voice span { flex: 1; min-width: 0; }
@@ -4577,7 +4578,40 @@ function voiceStop(user) {
   const b = $$('micBtn'); if (b) b.setAttribute('aria-pressed', 'false');
   if (user) vbarHide();
 }
+// new Android app (2.1): the phone's own speech recognition listens, stops by itself and the text is searched
+const NATIVE_MIC = () => { try { const A = window.BattagliApp; return !!A && typeof A.listen === 'function'; } catch (e) { return false; } };
+// listening state from the app: the mic button lights up and blinks in the theme colour, no Google window
+let natOn = false;
+window.__voiceState = st => {
+  const b = $$('micBtn'); natOn = st === 'on' || st === 'talk' || st === 'wait';
+  if (b) b.setAttribute('aria-pressed', natOn && st !== 'wait' ? 'true' : 'false');
+  clearTimeout(vHideT);
+  if (st === 'on') vbarShow('Ti ascolto: di\' il codice o cosa cerchi', 'Quando smetti di parlare cerco da solo');
+  else if (st === 'talk') vbarShow('Ti ascolto…', 'Tocca di nuovo il microfono per cercare subito');
+  else if (st === 'wait') vbarShow('Cerco…', '');
+  else if (st === 'perm') vbarShow('Consenti il microfono', 'Android ti chiede il permesso solo la prima volta');
+  else if (st === 'nomatch') { vbarShow('Non ho sentito niente: tocca il microfono e riprova', ''); vHideT = setTimeout(vbarHide, 3500); }
+  else if (st === 'noperm') { vbarShow('Il microfono non ha il permesso', 'Impostazioni del telefono › App › Battagli › Autorizzazioni › Microfono'); vHideT = setTimeout(vbarHide, 8000); }
+  else if (st === 'error') { vbarHide(); keyboardHint(); }
+  else vbarHide();
+  if (vbar) { const btn = vbar.querySelector('button'); btn.textContent = natOn ? 'Stop' : 'Ok'; btn.onclick = () => { if (natOn) { try { window.BattagliApp.stopListen(); } catch (e) {} } else vbarHide(); }; }
+};
+// words already understood go into the search bar while the person is still talking
+window.__voicePartial = text => {
+  if (!natOn || !text || !String(text).trim()) return;
+  try {
+    const v = voiceText(String(text));
+    // a code still being said ("zero uno punto zero…") is shown as digits in the code field as it grows
+    if (/^[\d. ]+$/.test(v) && /\d/.test(v)) { const q = $$('q'), qd = $$('qd'); qd.value = ''; q.value = v.replace(/ /g, ''); q.dispatchEvent(new Event('input', { bubbles: true })); }
+    else putQuery(v);
+  } catch (e) {}
+};
+window.__voiceNative = (text, missing) => {
+  if (missing) { keyboardHint(); return; }
+  if (text && String(text).trim()) { vbarHide(); window.__voicePut(String(text)); }
+};
 function voiceStart() {
+  if (NATIVE_MIC()) { try { if (natOn && typeof window.BattagliApp.stopListen === 'function') window.BattagliApp.stopListen(); else window.BattagliApp.listen(); return; } catch (e) {} }
   if (rec) { voiceStop(true); return; }
   if (!canListen) { keyboardHint(); return; }
   let r;
@@ -4640,9 +4674,11 @@ function dist(a, b, k) {
 }
 let CODES = null, CODES_AT = null, CMAP = null;
 function codeList() {
-  if (CODES_AT !== INDEX) { CODES_AT = INDEX; CMAP = new Map(); INDEX.rows.forEach((r, i) => { if (!CMAP.has(r.c)) CMAP.set(r.c, i); }); CODES = [...CMAP]; }
+  if (CODES_AT !== INDEX) { CODES_AT = INDEX; CMAP = new Map(); INDEX.rows.forEach((r, i) => { const j = CMAP.get(r.c); if (j == null || score(r) > score(INDEX.rows[j])) CMAP.set(r.c, i); }); CODES = [...CMAP]; }
   return CODES;
 }
+// a code printed twice (a mention on another page, then its real table) uses the row with the price and data
+function score(r) { const f = r.f || []; return (f.some(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(v)) ? 100 : 0) + f.length; }
 const rowOf = c => { codeList(); const i = CMAP.get(c); return i == null ? -1 : i; };
 // The suggestions are computed in small slices, so typing never waits for them; a newer query stops the old work.
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -4742,6 +4778,35 @@ window.__nvSugg = { codeSugg, textSugg, wordFix };
     try { localStorage.setItem('nvTabsOff', JSON.stringify(off)); } catch (err) {}
     apply(off);
   });
+})();
+
+// New Android app: when the site offers a newer app (update/app.json), the phone shows "Installa".
+// The new app (2.1) downloads and opens the installer by itself; older apps open the download link.
+(function appUpdate() {
+  const A = window.BattagliApp;
+  if (!A || typeof UPD_BASE === 'undefined' || typeof APP_PF === 'undefined' || APP_PF !== 'android') return;
+  let have = 0; try { have = typeof A.appVersion === 'function' ? +A.appVersion() || 0 : 0; } catch (e) {}
+  const css = document.createElement('style');
+  css.textContent = '#appUpdBar{z-index:14}';
+  document.head.appendChild(css);
+  setTimeout(async () => {
+    let j; try { const r = await fetch(UPD_BASE + 'app.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return; j = await r.json(); } catch (e) { return; }
+    if (typeof A.installApp !== 'function' && typeof A.openUrl !== 'function') return;  // no way to open the download in this app
+    if (!j || !(j.vc > have) || typeof j.apk !== 'string' || !/^https:\/\/serginolimoncino\.github\.io\/[\w./-]+\.apk$/.test(j.apk)) return;
+    try { if (sessionStorage.getItem('appUpdLater') === String(j.vc)) return; } catch (e) {}
+    const bar = document.createElement('div'); bar.className = 'updbar'; bar.id = 'appUpdBar'; bar.setAttribute('role', 'status');
+    bar.innerHTML = '<div class="ut"><b>Nuova versione dell\'app</b><small>' + (have ? 'Si installa con un tocco: i tuoi dati restano' : 'Con il microfono che cerca da solo: scaricala e installala') + '</small></div><button class="btn primary" type="button">' + (typeof A.installApp === 'function' ? 'Installa' : 'Scarica') + '</button><button class="updx" type="button" aria-label="Più tardi">×</button>';
+    document.body.appendChild(bar);
+    const go = bar.querySelector('.btn');
+    bar.querySelector('.updx').onclick = () => { bar.remove(); try { sessionStorage.setItem('appUpdLater', String(j.vc)); } catch (e) {} };
+    window.__appUpdProgress = pc => { go.textContent = pc >= 0 ? 'Scarico ' + pc + '%' : 'Scarico…'; };
+    window.__appUpdDone = ok => { go.disabled = false; go.textContent = 'Installa'; if (!ok) say('Non riesco a scaricare la nuova app: controlla internet'); else say('Tocca "Installa" nella finestra di Android'); };
+    go.onclick = () => {
+      if (typeof A.installApp === 'function') { go.disabled = true; go.textContent = 'Scarico…'; let ok = false; try { ok = A.installApp(j.apk); } catch (e) {} if (!ok) { go.disabled = false; go.textContent = 'Installa'; say('Riprova tra poco'); } }
+      else if (typeof A.openUrl === 'function') { A.openUrl(j.apk); say('Scarica il file e aprilo per installare la nuova app'); }
+      else { location.href = j.apk; }
+    };
+  }, 5000);
 })();
 })();
 
