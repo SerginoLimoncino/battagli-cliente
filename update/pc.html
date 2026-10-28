@@ -1005,10 +1005,12 @@ let currentRow = null;
 
 // ---------- local storage (IndexedDB) ----------
 let idbP = null;
+// (by address, not APP_ED: the databases are opened while the script is still running, before APP_ED exists)
+const DBN = n => /github\.io$/.test(location.hostname) && /^\/battagli-cliente\//.test(location.pathname) ? n + '-clienti' : n;
 function idb() {
   if (!idbP) idbP = new Promise((res, rej) => {
     try {
-      const r = indexedDB.open('catalogo-codici', 1);
+      const r = indexedDB.open(DBN('catalogo-codici'), 1);
       r.onupgradeneeded = () => r.result.createObjectStore('kv');
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -1029,10 +1031,26 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 let PRE = null;
 let PRE_SIG = '';
 const preSig = () => PRE_SIG || (PRE_SIG = (() => { const t = [normText, words, fmtCode, fold, buildVocab].map(f => String(f)).join('|') + [...STOP].join(','); let x = 0x811c9dc5; for (let k = 0; k < t.length; k++) { x ^= t.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16); })());
-const preKey = idx => [preSig(), idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
+const preKey = idx => [preSig() + '|clean1', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
 let preT = 0;
 function savePre(idx) { clearTimeout(preT); const key = preKey(idx), d = { key, HAY, HAYT, HAYS, V: [...VOCAB] }; preT = setTimeout(() => { if (INDEX === idx) idbSet('pre', d); }, 4000); }
+function cleanIdx(idx) {
+  if (!idx || idx.example || !idx.rows || idx.cleanV === 1) return;
+  let cli = false; try { cli = APP_ED === 'cliente'; } catch (e) {}
+  for (const r of idx.rows) {
+    if (!r || !r.f) continue;
+    const e = r.f.filter(([k]) => !k).map(([, v]) => String(v).trim().toLowerCase());
+    if (e.some(v => v === 'articolo' || /^prezzo\b/.test(v))) r.f = r.f.filter(([k]) => k);
+    if (cli) r.f = r.f.map(([k, v]) => {
+      if (!/prezz/i.test(k)) return [k, v];
+      const m = String(v).match(/^\s*\d[\d.]*,\d{2}\s*([A-Z]{0,2})\s*$/);
+      return m ? [k, m[1]] : [k, v];
+    }).filter(([k, v]) => !(/prezz/i.test(k) && v === ''));
+  }
+  idx.cleanV = 1;
+}
 function setIndex(idx, meta) {
+  cleanIdx(idx);
   INDEX = idx; META = meta || META;
   const pre = PRE && !idx.example && PRE.key === preKey(idx) ? PRE : null; PRE = null;
   if (pre) { HAY = pre.HAY; HAYT = pre.HAYT; HAYS = pre.HAYS; buildVocab(new Map(pre.V)); }
@@ -1971,7 +1989,7 @@ async function renderBox(page, box, maxW) {
 }
 // ---- photos kept on the device ----
 let fotoP = null; const FOTO_MAX = 40 * 1024 * 1024; let fotoMeta = null, fotoMetaT = 0;
-function fotoDb() { if (!fotoP) fotoP = new Promise((res, rej) => { try { const r = indexedDB.open('battagli-foto', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); return fotoP; }
+function fotoDb() { if (!fotoP) fotoP = new Promise((res, rej) => { try { const r = indexedDB.open(DBN('battagli-foto'), 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); return fotoP; }
 async function fotoGet(k) { try { const d = await fotoDb(); return await new Promise(res => { const q = d.transaction('f').objectStore('f').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } }
 async function fotoPut(k, v) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); t.objectStore('f').put(v, k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
 async function fotoDel(ks) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); for (const k of ks) t.objectStore('f').delete(k); t.oncomplete = res; t.onerror = res; t.onabort = res; }); } catch (e) {} }
@@ -2350,7 +2368,7 @@ async function siteCatalog() {
     if (!cur.example && cur.at >= info.at) return false;
     if (lsGet('catSkip', 0) === info.at && Date.now() - lsGet('catSkipT', 0) < 3 * 864e5) return false;
     try { const pv = await idbGet('indexPrev'); if (pv && pv.at >= info.at) return false; } catch (e) {}
-    if (!cur.example && !confirm('È disponibile il nuovo ' + (info.name || 'catalogo').replace(/_/g, ' ') + ' con le foto più nitide (' + Math.round((info.size || 0) / 1048576) + ' MB). Lo scarico adesso? Serve internet per qualche minuto. Il catalogo di adesso resta salvato.')) { lsSet('catSkip', info.at); lsSet('catSkipT', Date.now()); return false; }
+    if (!cur.example && !confirm('È disponibile il nuovo ' + (info.name || 'catalogo').replace(/_/g, ' ') + (info.msg || ' con le foto più nitide') + ' (' + Math.round((info.size || 0) / 1048576) + ' MB). Lo scarico adesso? Serve internet per qualche minuto. Il catalogo di adesso resta salvato.')) { lsSet('catSkip', info.at); lsSet('catSkipT', Date.now()); return false; }
   }
   const T = 'Scarico il catalogo';
   overlay(true, T, 'Serve internet per qualche minuto…', 0.02);
@@ -2379,7 +2397,7 @@ async function siteCatalog() {
     await idbSet('pdfKey', back && cur ? cur.at || 0 : 0);
     if (cur && !cur.example) { await idbDel('indexPrev'); await idbDel('pdfPrev'); await idbDel('pdfKeyPrev'); }
     lsSet('catSkip', info.at); lsSet('catSkipT', Date.now() - 3 * 864e5 + 6 * 36e5);
-    overlay(false); toast('Memoria del telefono piena: libera spazio, riproverò a scaricare il catalogo nuovo tra qualche ora'); return false;
+    overlay(false); toast('Memoria piena: libera spazio sul dispositivo, poi riprovo a scaricare il catalogo'); return false;
   }
   await idbSet('pdfKey', idx.at); await idbSet('meta', {});
   if (vj) {
@@ -2397,6 +2415,23 @@ async function siteCatalog() {
   return true;
 }
 (async function boot() {
+  // 1793206457477 = first customer catalogue without prices, saved before it carried ed: 'cliente'
+  const cliCat = c => c && (c.ed === 'cliente' || c.at === 1793206457477);
+  try { await 0;  // APP_ED is declared further down the script
+    const cur = APP_ED !== 'cliente' ? await idbGet('index') : null, none = !(cur && cur.rows && cur.rows.length && !cur.example);
+    if (APP_ED !== 'cliente' && (cliCat(cur) || none) && (cliCat(cur) || (await idbGet('indexPrev')))) {
+      // the employee catalogue was kept as "catalogo precedente" (also after a download that did not fit):
+      // put it back, nothing to download and no room needed
+      const pv = await idbGet('indexPrev'), pp = pv && pv.rows && !cliCat(pv) ? await idbGet('pdfPrev') : null;
+      if (pp) {
+        await idbSet('pdf', pp); await idbSet('pdfKey', (await idbGet('pdfKeyPrev')) || pv.at); await idbSet('index', pv);
+        const vm = await idbGet('vismeta'); if (vm) await idbSet('vismeta', Object.assign({}, vm, { at: pv.at }));  // same photos in both copies
+        for (const k of ['meta', 'pre']) await idbDel(k);
+        for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+      } else if (cliCat(cur)) for (const k of ['index', 'pdf', 'pdfKey', 'meta', 'pre']) await idbDel(k);
+      if (cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+    } else if (APP_ED !== 'cliente' && cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+  } catch (e) {}
   let hasCat = false; try { const c = await idbGet('index'); hasCat = !!(c && c.rows && c.rows.length && !c.example); } catch (e) {}
   const catFail = () => { overlay(false); toast('Download del catalogo non riuscito: riprovo alla prossima apertura'); };
   if (!hasCat) { try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { catFail(); } }
@@ -2628,7 +2663,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 31, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 32, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -3577,7 +3612,7 @@ const PROD = [
     'La resina 105 si miscela 5:1 in volume con l\'indurente 205 (veloce) o 206 (lento).',
     'Con il 205 indurisce anche a 4 °C, con il 206 serve almeno 16 °C.',
     'Resina e indurente devono avere la stessa lettera di formato (A, B, C o E) sulla confezione.'] }, /RESINA 105/],
-  [/^INTERNATIONAL DANBOLINE/, { url: 'https://international-yachtpaint.com/s3/documents/TDS/Danboline_spa_A4_20230731.pdf', fonte: 'scheda tecnica International Danboline (07/2023)', dati: [
+  [/^INTERNATIONAL DANBOLINE/, { url: 'https://specialtycoatings.brand.akzonobel.com/m/26f3fa0ae5754912/original/Danboline_ita_A4_20230731.pdf', fonte: 'scheda tecnica International Danboline (07/2023)', dati: [
     'Pittura per sentine, gavoni e paratie; resiste a olio e carburante e si pulisce facilmente.',
     'Resa teorica 12,3 m² al litro a pennello; 1-2 mani da 40 micron secchi.',
     'Mano successiva a 23 °C dopo 16 ore ed entro 2 giorni; a 15 °C dopo 24 ore ed entro 3 giorni.',
@@ -4086,6 +4121,193 @@ const SCHEDE = [
   [/^GRILLI LIROS SOFT SHACKLE/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=40'],
   [/^LIROS MOOREX 12/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=30'],
   [/^LIROS HANDY-ANCHOR/, null, 'https://www.liros.com/userdata/files/LIROS_rope_catalogue_2026_2027_eng___low_res.pdf#page=33'],
+  // checked 28-10-2026
+  [/^SIKA\s+PULITORI\-ATTIVATORI$/, /AKTIVATOR\s+205/, 'https://industry.sika.com/dam/dms/itgen/s/sika_aktivator-205.pdf'],
+  [/^SIKA\s+PULITORI\-ATTIVATORI$/, /AKTIVATOR\s+100/, 'https://industry.sika.com/dam/dms/itgen/u/sika_aktivator-100.pdf'],
+  [/^SIKA\s+PULITORI\-ATTIVATORI$/, /REMOVER\s+208/, 'https://industry.sika.com/dam/dms/itgen/n/sika_remover-208.pdf'],
+  [/^ACCELERANTI\s+AWLGRIP$/, /COLD\s+CURE/, 'https://specialtycoatings.brand.akzonobel.com/m/79b0f31db6aacd5/original/Cold_Cure_eng_A4_20191017.pdf'],
+  [/^ACCELERANTI\s+AWLGRIP$/, /PRO\s+CURE/, 'https://specialtycoatings.brand.akzonobel.com/m/7ed18da367cf5e3f/original/Pro_Cure_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+PRIMER\s+E\s+FONDI$/, /HIGH\s+BUILD/, 'https://specialtycoatings.brand.akzonobel.com/m/6234b17014ce259e/original/High_Build_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+STUCCHI\s+AWLFAIR$/, /D7222/, 'https://specialtycoatings.brand.akzonobel.com/m/34f9f7d53a64c625/original/Awlfair_LW_Fast_eng_A4_20240524.pdf'],
+  [/^AWLGRIP\s+STUCCHI\s+AWLFAIR$/, /D8200|D7200/, 'https://specialtycoatings.brand.akzonobel.com/m/3e6f7a0013d2bdb6/original/Awlfair_LW_Standard_eng_A4_20221115.pdf'],
+  [/^EPIFANES\s+VERNICI\s+MONOCOMPONENTI$/, /BRILLANTE/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/45/en-001-epifanes-clear-varnish.pdf'],
+  [/^EPIFANES\s+VERNICI\s+MONOCOMPONENTI$/, /WOODFINISH\s+GLOSS/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/47/en-002-epifanes-woodfinish-gloss.pdf'],
+  [/^EPIFANES\s+VERNICI\s+MONOCOMPONENTI$/, /WOODFINISH\s+MATTE/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/180/en-003-epifanes-woodfinish-matte.pdf'],
+  [/^EPIFANES\s+VERNICI\s+MONOCOMPONENTI$/, /RAPIDCLEAR/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/53/en-006-epifanes-rapidclear.pdf'],
+  [/^EPIFANES\s+VERNICI\s+BICOMPONENTI$/, /CLEARGLOSS/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/55/en-009-epifanes-poly-urethane-clear-gloss.pdf'],
+  [/^EPIFANES\s+VERNICI\s+BICOMPONENTI$/, /CLEAR\s+MAT/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/56/en-010-epifanes-poly-urethane-clear-satin.pdf'],
+  [/^EPIFANES\s+VERNICI\s+BICOMPONENTI$/, /PP\s+EXTRA/, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/57/en-011-epifanes-pp-varnish-extra.pdf'],
+  [/^WEST\s+SYSTEM\s+RESINE\s+EPOSSIDICHE$/, /RESINA 105|VELOCE 205/, 'https://gougeon.canto.com/direct/document/sojq22074t7fp41k420a3j3j65/COULp5Lf8baLNepTmQYPeE8l7Ik/original?content-type=application%2Fpdf&name=105-205+Epoxy+Resin.pdf'],
+  [/^WEST\s+SYSTEM\s+RESINE\s+EPOSSIDICHE$/, /206/, 'https://gougeon.canto.com/direct/document/kb9nhuqd1524j6q6m5kul9162c/w04qDMWLf8Il_hpKgBqmblMrXIE/original?content-type=application%2Fpdf&name=105-206+Epoxy+Resin.pdf'],
+  [/^KIT\s+WEST\s+SYSTEM\s+PACK\s+RESINE$/, /205/, 'https://gougeon.canto.com/direct/document/sojq22074t7fp41k420a3j3j65/COULp5Lf8baLNepTmQYPeE8l7Ik/original?content-type=application%2Fpdf&name=105-205+Epoxy+Resin.pdf'],
+  [/^KIT\s+WEST\s+SYSTEM\s+PACK\s+RESINE$/, /206/, 'https://gougeon.canto.com/direct/document/kb9nhuqd1524j6q6m5kul9162c/w04qDMWLf8Il_hpKgBqmblMrXIE/original?content-type=application%2Fpdf&name=105-206+Epoxy+Resin.pdf'],
+  [/^WEST\s+SYSTEM\s+ADDENSANTI$/, /403/, 'https://gougeon.canto.com/direct/document/k87nel898l4qdf7hpfrsurh903/RxrBOeYfWT5E_iQBSX9q59yYYp0/original?content-type=application%2Fpdf&name=403+Microfiber+Technical+Data+Sheet.pdf'],
+  [/^WEST\s+SYSTEM\s+ADDENSANTI$/, /406/, 'https://gougeon.canto.com/direct/document/fka7eq3ou94vp61vn691q01e2u/Db9et_8VXq8V1odWqUgkdzaKugc/original?content-type=application%2Fpdf&name=406+Colloidal+Silica+Technical+Data+Sheet.pdf'],
+  [/^PULSANTIERA\s+RADIO\s+CONTAMETRI\s+QUICK\s+CHC\s+W$/, /contacatena wireless/i, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/CHC_WH_Man_uso_IT_EN_Rev001A.pdf'],
+  [/^PULSANTIERA\s+RADIO\s+CONTAMETRI\s+QUICK\s+CHC\s+W$/, /base ricevitore/i, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/CHC_WA_IT_EN_Rev01A.pdf'],
+  [/^CARICABATTERIA\s+QUICK\s+SBC\s+12V$/, /\bSBC(140|250|300|500)\b/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SBCNRGPLUS_MINI-LOWPower_rev002A.pdf'],
+  [/^CARICABATTERIA\s+QUICK\s+SBC\s+12V$/, /\bSBC700\b/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SBCNRGPLUS_MEDIUMPower_IT_EN_rev002A.pdf'],
+  [/^CARICABATTERIA\s+QUICK\s+SBC\s+12V$/, /\bSBC1100\b/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SBCNRGPLUS_HIGHPower_IT_EN_rev002A.pdf'],
+  [/^CARICABATTERIA\s+QUICK\s+SBC\s+24V$/, /\bSBC950\b/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SBCNRGPLUS_MEDIUMPower_IT_EN_rev002A.pdf'],
+  [/^CARICABATTERIA\s+QUICK\s+SBC\s+24V$/, /\bSBC(1450|1950|2450)\b/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SBCNRGPLUS_HIGHPower_IT_EN_rev002A.pdf'],
+  [/^PORTAFUSIBILI\s+ANL\s+QUICK$/, /350 ?A/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Man01B_TFH3_Portafusibile.pdf'],
+  [/^PORTAFUSIBILI\s+ANL\s+QUICK$/, /600 ?A/, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Man02A_TFH6_Portafusibile.pdf'],
+  [/^ASPIRATORE\s+MOTORE\s+JABSCO$/, /\b34739\b/, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/34739-flange-mount-blower.pdf'],
+  [/^ASPIRATORE\s+MOTORE\s+JABSCO$/, /\b35400\b/, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/35400-technical-data-sheet.pdf'],
+  [/^POMPE\s+IMMERSIONE\s+220V\s+MAKITA$/, /PF0300/, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/PF0300.pdf'],
+  [/^POMPE\s+IMMERSIONE\s+220V\s+MAKITA$/, /PF0610/, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/PF0610.pdf'],
+  [/^TRAPANO\s+AVVITATORE\s+MAKITA\s+A\s+BATTERIA$/, /DHP490/, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DHP490.pdf'],
+  [/^TRAPANO\s+AVVITATORE\s+MAKITA\s+A\s+BATTERIA$/, /DHP485/, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DHP485.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+4\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+12\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+20\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+50\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+70\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^SUPPORTI\s+ANTIVIBRANTI\s+HUTCHINSON\s+PAULSTRADYN$/, /MAX\s+130\s+DAN/, 'https://www.paulstra-industry.com/upload/produit/pdf/paulstradyn-uk.pdf'],
+  [/^FILTRI\s+ACQUA\s+VETUS$/, /FTR\s+140/, 'https://vetus.com/wp-content/uploads/030505.01-r02-2026-01-Koelwaterfilter-FTR140.pdf'],
+  [/^FILTRI\s+ACQUA\s+VETUS$/, /FTR\s+330/, 'https://vetus.com/wp-content/uploads/030502.02-r04-2022-04-Koelwaterfilter-330_330M_330MU.pdf'],
+  [/^SIKA\s+221LV$/, null, 'https://industry.sika.com/dam/dms/itgen/r/sikaflex_-221_lv.pdf'],
+  [/^SIKA\s+PRIMER\s+290\s+DC$/, null, 'https://industry.sika.com/dam/dms/itgen/a/sika_primer-290_dc.pdf'],
+  [/^SIKA\s+SALVIETTE\s+HANDCLEAN\s+350H$/, null, 'https://industry.sika.com/dam/dms/itgen/1/sika_cleaner-350h.pdf'],
+  [/^SIKAFLEX\s+221$/, null, 'https://industry.sika.com/dam/dms/itgen/y/sikaflex_-221.pdf'],
+  [/^SIKAFLEX\s+592$/, null, 'https://che.sika.com/dms/getdocument.get/b8b02d9b-e785-4a44-977f-a7e56f84fa58_ch01/sds-sikaflex-592.pdf'],
+  [/^SIKAFLEX\s+295\s+UV$/, null, 'https://industry.sika.com/dam/dms/itgen/e/sikaflex_-295_uv.pdf'],
+  [/^SIKAFLEX\s+292I$/, null, 'https://industry.sika.com/dam/dms/itgen/o/sikaflex_-292i.pdf'],
+  [/^SIKAFLEX\s+290I\s+DC\s+PRO$/, null, 'https://industry.sika.com/dam/dms/itgen/r/sikaflex_-290_dcpro.pdf'],
+  [/^SIKAFLEX\s+268\s+POWER\s+CURE$/, null, 'https://industry.sika.com/dam/dms/itgen/9/sikaflex_-268_powercure.pdf'],
+  [/^HEMPEL'S\s+LIGHT\s+PRIMER\s+45551$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/45551/it-IT'],
+  [/^HEMPEL'S\s+UNDERWATER\s+PRIMER\s+26030$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/26030/it-IT'],
+  [/^HEMPEL'S\s+HIGH\s+PROTECT\s+II\s+35780$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/35780/it-IT'],
+  [/^HEMPEL'S\s+EPOXY\s+FILLER$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/35250/it-IT'],
+  [/^HEMPEL'S\s+PROFAIR\s+35290$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/35290/it-IT'],
+  [/^HEMPEL'S\s+HARD\s+RACING\s+TECCEL\s+76890$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/76890/it-IT'],
+  [/^HEMPEL'S\s+MILLE\s+NCT\s+71890$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/71890/it-IT'],
+  [/^HEMPEL'S\s+HARD\s+RACING\s+TECCEL\s+76880\s+MAXY\s+SIZE$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/76880/it-IT'],
+  [/^HEMPEL'S\s+MILLE\s+NCT\s+71880\s+MAXY\s+SIZE$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/71880/it-IT'],
+  [/^HEMPEL'S\s+DILUENTE\s+808$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/SDS/Download/0808100000/Italy/it-IT'],
+  [/^HEMPEL'S\s+CONVERSION\s+PRIMER\s+45441$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/45441/it-IT'],
+  [/^HEMPEL'S\s+SILIC\s+ONE\s+77450$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/77450/it-IT'],
+  [/^HEMPEL'S\s+EPOXY\s+THINNER\s+845$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/SDS/Download/0845100000/Italy/it-IT'],
+  [/^HEMPEL'S\s+SILIC\s+ONE\s+TIECOAT\s+27450$/, null, 'https://hempel.com/it-it/api/Hempel/DataSheet/PDS/Download/27450/it-IT'],
+  [/^AWLGRIP\s+TOPCOAT\s+WHITE$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+TOPCOAT\s+BLUE$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+TOPCOAT\s+GRIGI\s+\-\s+NERI$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+TOPCOAT\s+ROSSI\-GIALLI$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^GRIPTEX\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/6631155c6dfe36f9/original/Griptex_eng_A4_20190118.pdf'],
+  [/^FLATTENING\s+AGENT\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/7bfb8632acb9933a/original/Flattening_Agent_G3013_eng_A4_20200809.pdf'],
+  [/^AWLGRIP\s+VERNICI\s+TRASPARENTI\s+TOPCOAT$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLCAT\s+\#2\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLCAT\s+\#3\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/2cb51b624036a3eb/original/Awlgrip_Topcoat_eng_A4_20190118.pdf'],
+  [/^AWLGRIP\s+545\s+EPOXY\s+PRIMER$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/565ed512e6d1c980/original/545_Epoxy_Primer_eng_A4_20240405.pdf'],
+  [/^AWLWASH\s+2\.0\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/1c3b89c1fbfed87c/original/Awlwash_2_0_eng_A4_20230726.pdf'],
+  [/^AWLCARE\s+AWLGRIP$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/7641d9ff480f0888/original/Awlcare_eng_A4_20210218.pdf'],
+  [/^AWLGRIP\s+REDUCER$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/189881207c597a89/original/Reducer_T0001_Fast_Spray_eng_A4_20190118.pdf'],
+  [/^EASY\s+FLOW\s+EPIFANES$/, null, 'https://www.epifanes.nl/include/php/download.php?filename=/UserFiles/product_files/109/nl-017-epifanes-easy-flow.pdf'],
+  [/^INTERNATIONAL\s+DANBOLINE$/, null, 'https://specialtycoatings.brand.akzonobel.com/m/26f3fa0ae5754912/original/Danboline_ita_A4_20230731.pdf'],
+  [/^SVITOL$/, null, 'https://www.svitol.it/wp-content/uploads/2019/04/ST4317-Svitol-Lubrificante-Multifunzione.pdf'],
+  [/^SVITOL\s+PROFESSIONAL\s+MARINE$/, null, 'https://www.svitol.it/wp-content/uploads/2026/05/SDSIT4327-SVITOL-PROF.MARINE-ML-400.pdf'],
+  [/^IMPREGNANTE\s+BOERO\s+BIOLEGNO$/, null, 'https://www.boero.it/wp-content/uploads/2021/07/scheda-tecnica-biolegno-cod-134-impregnante-protettivo-per-legno-boero.pdf'],
+  [/^UNIGLOSS\s+SMALTO\s+VENEZIANI$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Unigloss_TDS.pdf'],
+  [/^VENEZIANI\s+SENTIFLEX\s+GRIGIO$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Sentiflex.pdf'],
+  [/^STUCCO\s+SUB\s+COAT\s+XT\s+VENEZIANI$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Sub_Coat_Xt_TDS.pdf'],
+  [/^VENEZIANI\s+EUROSPRINT\s+NEXT$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Eurosprint-Next_TDS.pdf'],
+  [/^VENEZIANI\s+EUROSPRINT\s+PRO$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/09/Eurosprint_PRO_TDS.pdf'],
+  [/^SISTEMA\s+EPOSSIDICO\s+VENEZIANI\s+RESINA\s+3\+$/, null, 'https://www.venezianiyachting.com/wp-content/uploads/2024/07/Resina_3__TDS.pdf'],
+  [/^ANCORA\s+QUICK\s+OLYMPIC$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Visual_Ancora_IT_ENG_00A.pdf'],
+  [/^GIUNTO\s+GIREVOLE\s+QUICK\s+OLYMPIC$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Giunto_IT_01B.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORE\s+DP2\s+BASSO$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/DPSeries_rev001C_IT.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORE\s+DP2\s+CON\s+CAMPANA$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/DPSeries_rev001C_IT.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORE\s+DP2E\s+BASSO$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/DP2E_6_10_11%20Rev%2000A.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORE\s+DP2E\s+CON\s+CAMPANA$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/DP2E_6_10_11%20Rev%2000A.pdf'],
+  [/^SALPA\s+ANCORA\s+QUICK\s+DP3\s+1000W$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/DPSeries_rev001C_IT.pdf'],
+  [/^SALPA\s+ANCORA\s+QUICK\s+DP3\s+1500W$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/DPSeries_rev001C_IT.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORA\s+DYLAN\s+DH4\s+BASSO$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/Man02B_DH4_Dylan_IT_EN.pdf'],
+  [/^QUICK\s+SALPA\s+ANCORA\s+DYLAN\s+DH4\s+CON\s+CAMPANA$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/Man02B_DH4_Dylan_IT_EN.pdf'],
+  [/^VERRICELLO\s+QUICK\s+ON\-DECK\s+GENIUS\s+GP2$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/GPSeries_rev000A_IT.pdf'],
+  [/^VERRICELLO\s+QUICK\s+ON\-DECK\s+HECTOR\s+HC3\s+1000W$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/HC3%207-10-15%20Rev%2008A.pdf'],
+  [/^VERRICELLO\s+QUICK\s+ON\-DECK\s+HECTOR\s+HC3\s+1500W$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/HC3%207-10-15%20Rev%2008A.pdf'],
+  [/^VERRICELLO\s+DA\s+TONNEGGIO\s+QUICK\s+TUMBLER\s+TB2$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/TB_Series_REV00A_IT.pdf'],
+  [/^VERRICELLO\s+DA\s+TONNEGGIO\s+QUICK\s+TUMBLER\s+TB3$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/TB_Series_REV00A_IT.pdf'],
+  [/^VERRICELLO\s+DA\s+TONNEGGIO\s+QUICK\s+TUMBLER\s+TB4$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/TB_Series_REV00A_IT.pdf'],
+  [/^VERRICELLO\s+X\s+RECUPERO\s+TENDER\s+QUICK\s+TOTEM\s+TMG$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/TOTEM%20G%206-10-11%20Rev%2001A.pdf'],
+  [/^COMANDO\s+A\s+BASCULA\s+QUICK\s+WCS\s+830$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/WCS830_B00_R002A.pdf'],
+  [/^COMANDO\s+DA\s+PLANCIA\s+QUICK\s+WCS\s+820$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Fist_01A_WCS820.pdf'],
+  [/^INTERRUTTORE\s+MAGNETO\s+IDRAULICO\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Fist_01A_WCB_magnetoIdraulico.pdf'],
+  [/^CONTACATENA\s+QUICK\s+QNC\s+CHC$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/qnc-chc/QNC_CHC_B_IT_EN_REV003A.pdf'],
+  [/^DISPLAY\s+CONTACATENA\s+SMART\s+CHC\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/SMART_CHC_IT_EN_FR_DE_ES_REV001A.pdf'],
+  [/^RADIOCOMANDO\s+TASCABILE\s+QUICK\s+RRC\s+PLUS$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/RRC/RRC_Plus_P02-04_Rev001A.pdf'],
+  [/^RADIOCOMANDO\s+PALMARE\s+QUICK\s+RRC\s+PLUS$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/RRC_Plus_H02_H12_Rev002A.pdf'],
+  [/^RICEVITORE\s+QUICK\s+RRC\s+PLUS$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/RRC/RRC_Plus_R02-12_RevR001A.pdf'],
+  [/^KIT\s+RADIOCOMANDO\s+RRC\s+PLUS\s+QUICK\s+TASCABILE$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/RRC/RRC_Plus_P02-04_Rev001A.pdf'],
+  [/^KIT\s+RADIOCOMANDO\s+RRC\s+PLUS\s+QUICK\s+PALMARE$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/RRC_Plus_H02_H12_Rev002A.pdf'],
+  [/^PULSANTIERA\s+HRC\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/HRC100x_Rev05D.pdf'],
+  [/^PULSANTIERA\s+HRC\s+QUICK\s+CON\s+TORCIA\s+LED$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/HRC100x_Rev05D.pdf'],
+  [/^PULSANTIERA\s+CONTACATENA\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Man01A_CHC1103B_IT.pdf'],
+  [/^QUICK\s+PULSANTI\s+COMANDO\s+A\s+PIEDE$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/MOD.900%20REV007A.pdf'],
+  [/^TELERUTTORI\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/T6215-xx.pdf'],
+  [/^CONTROL\s+BOX\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/T6315-xx_T6415-xx_Rev002A.pdf'],
+  [/^INTERRUTTORE\s+DI\s+SENTINA\s+ELETTRONICO\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/EBSN10-15-20%20REV001A.pdf'],
+  [/^NAUTIC\s+BOILER\s+QUICK\s+B3$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/B3Series_rev02A_IT.pdf'],
+  [/^NAUTIC\s+BOILER\s+QUICK\s+BX\s+SQUARE$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BX16_Boiler_Rev07A.pdf'],
+  [/^SQUARE\s+BOILER\s+QUICK\s+BXS$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BoilerBXS25-40%20Rev06A.pdf'],
+  [/^SEPARATORI\s+DI\s+CARICA\s+QUICK\s+ECS$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/ECS_ChargeSeparator_IT_EN_R004A.pdf'],
+  [/^INVERTER\s+QUICK\s+ONDA\s+PURE\s+SINE\s+WAVE$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Man001A_HSI_GR1_HR_IT_EN.PDF'],
+  [/^CONNETTORI\s+STAGNI\s+QUICK\s+HYPERTAC$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/Connettore%20IP67%20serie%2071xx%20REV01A.pdf'],
+  [/^KIT\s+ELICA\s+QUICK\s+BTQ140$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BTQSeries_rev05A_IT.pdf'],
+  [/^KIT\s+ELICA\s+QUICK\s+BTQ185$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BTQSeries_rev05A_IT.pdf'],
+  [/^ELICA\s+DI\s+MANOVRA\s+QUICK\s+185\s+DOPPIA\s+ELICA$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BTQSeries_rev05A_IT.pdf'],
+  [/^ELICA\s+DI\s+MANOVRA\s+QUICK\s+250\s+DOPPIA\s+ELICA$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/BTQSeries_rev05A_IT.pdf'],
+  [/^COMANDI\s+PER\s+ELICHE\s+QUICK$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/TCD2022_2042_IT_EN_FR_R02A.pdf'],
+  [/^INTERCEPTA\s+QUICK\s+IN45$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/intercepta/CMINQIT00000_UM_INTERCEPTA_IT_R02_07_2026.pdf'],
+  [/^INTERCEPTA\s+QUICK\s+IN60$/, null, 'https://www.quickitaly.com/resources/downloads_qne-prod/1/intercepta/CMINQIT00000_UM_INTERCEPTA_IT_R02_07_2026.pdf'],
+  [/^LOFRANS'\s+X1\s+ALU$/, null, 'https://www.lofrans.com/download/01KFJM43XHEF8R11N5B0KACMBB'],
+  [/^LOFRANS'\s+X2\s+CHROME$/, null, 'https://www.lofrans.com/download/01KFJM440KC8W3W9Y81TQE9455'],
+  [/^LOFRANS\s+TIGRES$/, null, 'https://www.lofrans.com/download/01KFJM465Q3S1ZHF19H3P28PKD'],
+  [/^PULSANTI\s+A\s+PIEDE\s+LOFRANS$/, null, 'https://www.lofrans.com/download/01KFJM45GB632XH3A70H5R3J49'],
+  [/^CIRCUIT\s+BREAKER\s+LOFRANS$/, null, 'https://www.lofrans.com/download/01KFJM45G4ET570NBHNHJ9HNKC'],
+  [/^TOILETTE\s+MANUALE\s+JABSCO\s+TAZZA\s+COMPACT$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/user-guide-twist-n-lock-manual-marine-toilet/'],
+  [/^TOILETTE\s+MANUALE\s+JABSCO\s+TAZZA\s+REGULAR$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/user-guide-twist-n-lock-manual-marine-toilet/'],
+  [/^KIT\s+TOILETTE\s+VERTICALE\s+JABSCO$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/29200-electric-conversion-kit-.pdf'],
+  [/^TOILETTE\s+ELETTRICA\s+COMPACT\s+JABSCO$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/37010-electric-head.pdf'],
+  [/^JABSCO\s+TOILETTE\s+QUIET\s+FLUSH\s+2024\s+E2\s+ACQUA\s+DI\s+MARE$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/user-guide-quiet-flush-e2.pdf'],
+  [/^TOILETTE\s+QUIET\s+FLUSH\s+JABSCO\s+COMPACT\s+ACQUA\s+DI\s+MARE$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/user-guide-quiet-flush-37245-models.pdf'],
+  [/^POMPA\s+SCARICO\s+DOCCIA\s+SHOWER\s+JABSCO$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/50880-technical-datasheet-multi-lingual.pdf'],
+  [/^AUTOCLAVE\s+JABSCO\s+DOUBLE\s+STACK\s+WATER\s+SYSTEM$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/technical-brochure/52530-series-double-stack-datasheet-model-number-52530-1000.pdf'],
+  [/^AERATORI\s+JABSCO\s+HEAVY\s+DUTY$/, null, 'https://www.xylem.com/siteassets/brand/jabsco/resources/manual/357x0-technical-data-sheet.pdf'],
+  [/^MAKITA\s+MULTIFUNZIONE\s+STARLOCK\s+MAX$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DTM52.pdf'],
+  [/^SMERIGLIATRICE\s+MAKITA\s+220V$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/GA4530.pdf'],
+  [/^TRAPANO\s+AVVITATORE\s+MAKITA\s+A\s+BATTERIA\s+COMPACT$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DHP487.pdf'],
+  [/^TRAPANO\s+A\s+PERCUSSIONE\s+MAKITA\s+HP1631$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/HP1631.pdf'],
+  [/^TRAPANO\s+A\s+PERCUSSIONE\s+MAKITA\s+HP2051$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/HP2051.pdf'],
+  [/^TRAPANO\s+AVVITATORE\s+MAKITA\s+DP4011$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DP4011.pdf'],
+  [/^RIVETTATRICE\s+A\s+BATTERIA\s+18V\s+MAKITA$/, null, 'https://www.icmsmakita.eu/CMS/custom/fi/attachments/user_manuals/User_manuals_EU2/DRV150.pdf'],
+  [/^FILTRI\s+ANTI\-ODORE\s+VETUS\s+NSF\s+Ø150$/, null, 'https://vetus.com/wp-content/uploads/110102.03-r05-2025-04-Geurfilter-NSF330.pdf'],
+  [/^ANTISIFONE\s+AIRVENT\s+V\s+VETUS$/, null, 'https://vetus.com/wp-content/uploads/030405.04-r04-2025-03-Beluchter.pdf'],
+  [/^ANTISIFONI\s+VETUS\s+ASD$/, null, 'https://vetus.com/wp-content/uploads/030426.01-r03-2025-07-beluchters.pdf'],
+  [/^AIRVENT\s+ASD38V$/, null, 'https://vetus.com/wp-content/uploads/030426.01-r03-2025-07-beluchters.pdf'],
+  [/^POZZETTO\s+PER\s+ACQUE\s+GRIGIE\s+GWDS\s+VETUS$/, null, 'https://vetus.com/wp-content/uploads/110120.01-r07-2026-08-GWDS.pdf'],
+  [/^VETUS\s+WATERLOCK\s+NLP$/, null, 'https://vetus.com/wp-content/uploads/030419.04-r05-2022-01-NLP.pdf'],
+  [/^VETUS\s+WATERLOCK\s+LP$/, null, 'https://vetus.com/wp-content/uploads/030412.05-r09-2026-01-UIT3090.pdf'],
+  [/^VETUS\s+MUFFLER\s+MP$/, null, 'https://vetus.com/wp-content/uploads/030413.03-r05-2021-11-DEMPMP-1.pdf'],
+  [/^VETUS\s+SIFONE\s+LT$/, null, 'https://vetus.com/wp-content/uploads/030414.02-r04-2021-02-LT.pdf'],
+  [/^VHF\s+ICOM\s+IC\-M37$/, null, 'https://www.icomjapan.com/api/download.php?post_id=1829&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NMzdFX01MVF9HSV9JTV8zLnBkZg=='],
+  [/^VHF\s+ICOM\s+IC\-M25EVO$/, null, 'https://www.icomjapan.com/api/download.php?post_id=4283&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NMjVFVVJPX0VWT19NTFRfQk1fMS5wZGY='],
+  [/^VHF\s+ICOM\s+IC\-M73$/, null, 'https://www.icomjapan.com/api/download.php?post_id=4341&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NNzNFVVJPX01MVF9CTV8wLnBkZg=='],
+  [/^VHF\s+ICOM\s+IC\-M85E$/, null, 'https://www.icomjapan.com/api/download.php?post_id=1733&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NODVFX01MVF9CTV80LnBkZg=='],
+  [/^VHF\s+ICOM\s+IC\-M94DE$/, null, 'https://www.icomjapan.com/api/download.php?post_id=3205&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NOTRERV9NTFRfQk1fNC5wZGY='],
+  [/^VHF\s+FISSO\s+ICOM\s+IC\-M330GE$/, null, 'https://www.icomjapan.com/api/download.php?post_id=1723&fl=JTJGdXBsb2FkcyUyRnN1cHBvcnQlMkZtYW51YWwlMkZJQy1NMzMwRV9NTFRfQk1fNy5wZGY='],
+  [/^BOERO\s+MISTRAL\s+FONDO$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Mistral-Fondo.pdf'],
+  [/^PRIMER\s+BOERO\s+DELTA\s+3000$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Delta-3000.pdf'],
+  [/^PRIMER\s+BOEROGUARD\s+DUO$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/BoeroGuard-Duo.pdf'],
+  [/^ANTIRUGGINE\s+BOERO\s+NOXY$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Noxy.pdf'],
+  [/^SOTTOSMALTO\s+BOERO\s+EPOPLY$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Epoply.pdf'],
+  [/^SMALTO\s+BOERO\s+ALTURA\s+TC$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Altura-TC.pdf'],
+  [/^SMALTO\s+BOERO\s+FISHERMAR$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Fishermar.pdf'],
+  [/^SMALTO\s+PER\s+SENTINE\s+SENTILAK\s+BOERO$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Sentilak.pdf'],
+  [/^ANTIVEGETATIVA\s+BOERO\s+SCIROCCO\s+622\s+PLUS$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Scirocco-622-Plus.pdf'],
+  [/^ANTIVEGETATIVA\s+BOERO\s+SCIROCCO\s+622\s+EXTRA$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Scirocco-622-Extra.pdf'],
+  [/^ANTIVEGETATIVA\s+BOERO\s+CROSSOVER$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Crossover.pdf'],
+  [/^IMPREGNANTE\s+BIOWOOD\s+BOERO$/, null, 'https://www.boeroyachtcoatings.com/wp-content/uploads/2026/09/Biowood.pdf'],
 ];
 function explain(i) {
   const r = INDEX.rows[i], b = INDEX.blocks[r.b] || {}, rep = r.c.slice(0, 2);
@@ -4288,11 +4510,12 @@ idleExtra();
 // The producers' PDFs are copied on this edition's own site (schede/<name>.pdf), because their sites do not let
 // another app show them. First opening downloads it, then it stays on the device. pdf.js draws the pages.
 // previews (…/prova/vN/) read the copies of the site they are on
-const SCH_BASE = (/\/prova\/v\d+\//.test(location.href) ? location.href.split('/prova/')[0] + '/' : typeof SITE_CAT === 'string' ? SITE_CAT.replace(/catalog\/?$/, '') : '') + 'schede/';
+const SCH_BASE = (/\/prova\/(?:v\d+|anteprima)\//.test(location.href) ? location.href.split('/prova/')[0] + '/' : typeof SITE_CAT === 'string' ? SITE_CAT.replace(/catalog\/?$/, '') : '') + 'schede/';
 const schName = u => { let x = 0x811c9dc5; for (let k = 0; k < u.length; k++) { x ^= u.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16).padStart(8, '0'); };
 // sheets the copy job could not fetch (producer site refused it): opened on the producer's site instead
 const NO_COPY = new Set(['8dc979fc']);
-const isPdf = u => /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS|3m\.com\/mws\/mediawebserver/i.test(u);
+const SCH_NEW = new Set(["0052d5b9", "02554877", "04abcae4", "05152002", "05fdfa65", "07b703c5", "093bd206", "09f6d13b", "12033e76", "14be7fe7", "153bd5ab", "1e71a32e", "1f73d5fd", "1fe9dd76", "20a65da2", "2142c339", "2204e683", "2283fd83", "228aa57e", "2368ac49", "24ab9b2a", "2600127b", "29b005b0", "2a4165e4", "2adc3ebc", "2dcb3ecb", "2df52c57", "2f0da6bd", "2f75b8ca", "31ac3456", "32fe1376", "334da146", "383193ed", "39e7b655", "3fe6ae90", "437ec00d", "439b62d0", "45109f9a", "466f2696", "48788db9", "490d1d03", "4b9d1912", "517f3b86", "534307f8", "5478dea8", "54c2d3d8", "55392d78", "59a8eb23", "5a735851", "5c1b1c42", "5d2f83fb", "5e08c8ae", "5e74ec14", "5f35e8c2", "63274b87", "63d9d1b4", "6471ddab", "648b8649", "6599d77f", "681d6d56", "6b00d2ee", "6cfd55f6", "6fa411ad", "7016443b", "7181aac3", "73363ed4", "73977c9c", "75637e57", "765fffa1", "79621f8c", "7c825070", "7cd0189c", "7d70bfa4", "7ebc9818", "7f191706", "800ee95b", "815483b4", "822b76fe", "834b1d63", "856bc660", "88b94162", "8ad16168", "90de43b8", "90fddd5a", "924fee8e", "9269611d", "938adec1", "948c9de3", "95233b5a", "98b75606", "9c316f4f", "9ca746e7", "9eed0e6b", "a0bd6fa6", "a3a5c2d5", "a66a767f", "a6fed575", "a77c6cbd", "a9587240", "aa24d3d3", "ae3a9817", "b3aac192", "b46935a7", "b79954c6", "b9290903", "b996a077", "b9d83d11", "bbcb9838", "bcaf775f", "bfab34df", "c2bd3371", "c2d0949b", "c58d36ee", "c84f684b", "caca0102", "cc9fd5d7", "ccafd3a0", "cea46021", "cf26ccfc", "cf6f8e78", "cff8cb71", "d3941d5d", "d778f92b", "d876c579", "d9dcd796", "da994181", "daadf079", "dc2fcd23", "de71374f", "e01d216e", "e0737366", "e52ddb1b", "e5a6b599", "e609f344", "e758796d", "e768e520", "e77e012b", "e7a92eae", "e975a737", "ea78359c", "ec112c14", "ec18b765", "ec94b097", "ee5ddb2b", "eef0629b", "f2b9c7ed", "f3548d68", "f446d25d", "f5b2a5fd", "f7f78968", "f8c058c8", "f8e6ef81", "f9c4a93a", "feb76233"]);
+const isPdf = u => SCH_NEW.has(schName(u)) || /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS|3m\.com\/mws\/mediawebserver/i.test(u);
 let schDb = null;
 function db() {
   if (schDb) return schDb;
@@ -4315,7 +4538,7 @@ async function touch(key, size) {
   dbPut('meta', m);
 }
 // the PC program carries the sheets inside (schede/ next to the page): read from there, nothing to download
-const SCH_PREVIEW = /\/prova\/v\d+\//.test(location.href);
+const SCH_PREVIEW = /\/prova\/(?:v\d+|anteprima)\//.test(location.href);
 let schLocal = null;
 function hasLocal() { if (!schLocal) schLocal = SCH_PREVIEW || location.protocol === 'https:' ? Promise.resolve(false) : fetch('schede/pdfjs/pdf.min.js', { method: 'HEAD' }).then(r => r.ok, () => false); return schLocal; }
 async function cached(key, url, type) {
@@ -4391,7 +4614,7 @@ async function fetchAllSheets() {
     for (const x of SCHEDE) urls.add(x[2]);
     for (const u of Object.values(SCH_CODE)) urls.add(u);
     for (const u of urls) {
-      if (!isPdf(u) || NO_COPY.has(schName(u))) continue;
+      if (!isPdf(u) || NO_COPY.has(schName(u)) || SCH_NEW.has(schName(u))) continue;
       const nm = schName(u); if (await dbGet('pdf:' + nm)) continue;
       try { await cached('pdf:' + nm, SCH_BASE + nm + '.pdf', 'application/pdf'); } catch (e) { if (!navigator.onLine) break; }
       await new Promise(r => setTimeout(r, 150));
@@ -4466,7 +4689,7 @@ window.openRow = function (i) { const r = orig.apply(this, arguments); try { mou
 </script><script>
 // Novità 2.0 (build 26): ricerca a voce e "Forse cercavi…".
 // Lista: in both copies. Employee copy: "Lista per il cliente" with editable prices and the Battagli header.
-// Customer copy (CLI = true): "Lista dei desideri" on a plain white sheet, no name or logo, catalogue prices only.
+// Customer copy (CLI = true): "Lista dei desideri" on a plain white sheet, no name or logo, no euro prices: only code, quantity and the catalogue's price letter (Sergio 28-10-2026). Liste salvate in both copies (customers too, kept apart in listeSalvateClienti).
 const CLI = true;
 
 // Tutto succede sul telefono: nessuna pagina esterna, nessun servizio online.
@@ -4557,7 +4780,28 @@ body[class*="nv-off-"] .tabbar .tab { flex: 1 1 0; }
 .nv-gone > small { color: var(--muted); font-size: 13px; }
 .nv-gone .g { display: flex; align-items: center; justify-content: space-between; font-family: var(--f-code); font-weight: 600; color: var(--muted); }
 .nv-gone .g .x { border: 0; background: var(--blue-soft); color: var(--blue); border-radius: 999px; width: 32px; height: 32px; font-weight: 800; }
+.nv-sbar { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.nv-sbar .cur { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--ink); overflow: hidden; }
+.nv-sbar .cur span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-sbar .cur small { color: var(--muted); font-weight: 600; font-size: 13px; }
+.nv-fold { width: 20px; height: 20px; flex: none; color: var(--blue); }
+.nv-sbtn { display: inline-flex; align-items: center; gap: 7px; flex: none; margin-left: auto; border: 0; border-radius: 999px; background: var(--blue-soft); color: var(--blue); padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 800; }
+.nv-sbtn b { background: var(--blue); color: #fff; border-radius: 999px; min-width: 20px; height: 20px; padding: 0 6px; font-size: 12px; display: inline-grid; place-items: center; }
 
+.nv-lact button.save { grid-column: 1 / -1; background: transparent; color: var(--blue); box-shadow: inset 0 0 0 1.5px var(--blue); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.nv-sform { grid-column: 1 / -1; display: grid; gap: 8px; background: var(--bg); border-radius: 16px; box-shadow: var(--card-shadow); padding: 12px; animation: nvAq .2s ease-out; }
+.nv-sform .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nv-scard { display: flex; align-items: center; gap: 12px; background: var(--bg); border-radius: 16px; box-shadow: var(--card-shadow); padding: 14px; }
+.nv-scard .o { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; color: var(--ink); }
+.nv-scard .o .ic { width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--blue-soft); display: grid; place-items: center; }
+.nv-scard .o .ic svg { width: 24px; height: 24px; color: var(--blue); }
+.nv-scard .o span { min-width: 0; display: grid; gap: 2px; }
+.nv-scard .o b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-scard .o small { color: var(--muted); font-size: 13px; }
+.nv-scard .o em { font-style: normal; font-weight: 800; color: var(--ink); font-size: 14px; }
+.nv-scard.on { box-shadow: 0 0 0 2px var(--blue), var(--card-shadow); }
+.nv-scard .x { flex: none; border: 0; border-radius: 999px; background: transparent; color: var(--muted); height: 36px; min-width: 36px; padding: 0 10px; font: inherit; font-size: 14px; font-weight: 800; }
+.nv-scard .x.sure { background: var(--red, #d33); color: #fff; }
 .chipbtn.nv-addl[aria-pressed="true"] { background: var(--blue); color: #fff; box-shadow: none; }
 
 .nv-addw, .bigcode span.nv-addw, .bigcode .nv-addw span { display: inline-flex; align-items: center; flex: none; font-family: var(--f-ui); font-size: 14px; letter-spacing: 0; line-height: normal; color: inherit; }
@@ -4816,7 +5060,7 @@ function codeList() {
   return CODES;
 }
 // a code printed twice (a mention on another page, then its real table) uses the row with the price and data
-function score(r) { const f = r.f || []; return (f.some(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(v)) ? 100 : 0) + f.length; }
+function score(r) { const f = r.f || []; return (f.some(([k, v]) => /prezz/i.test(k) && (/\d,\d{2}/.test(v) || /^[A-Z]{1,2}$/.test(String(v).trim()))) ? 100 : 0) + f.length; }
 const rowOf = c => { codeList(); const i = CMAP.get(c); return i == null ? -1 : i; };
 // The suggestions are computed in small slices, so typing never waits for them; a newer query stops the old work.
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -4906,7 +5150,7 @@ const lget = () => {
   const items = v.items.filter(x => x && typeof x.c === 'string' && /^\d{8}$/.test(x.c)).map(x => ({ c: x.c, q: isFinite(+x.q) && +x.q > 0 ? +x.q : 1, p: x.p == null || !isFinite(+x.p) || +x.p < 0 ? null : +x.p }));
   const pc = x => x == null || x === '' || !isFinite(+x) || +x <= 0 ? null : Math.min(100, Math.round(+x * 100) / 100);
   const o = { items, cliente: typeof v.cliente === 'string' ? v.cliente : '', note: typeof v.note === 'string' ? v.note : '', sc1: CLI ? null : pc(v.sc1), sc2: CLI ? null : pc(v.sc2) };  // customer copy: no discounts
-  if (!CLI && typeof v.sid === 'string') o.sid = v.sid;  // the saved list this one is (its changes are kept there too)
+  if (typeof v.sid === 'string') o.sid = v.sid;  // the saved list this one is (its changes are kept there too)
   return o;
 };
 const lset = v => { try { localStorage.setItem(LKEY, JSON.stringify(v)); } catch (e) { say('Memoria del telefono piena: la lista non è stata salvata'); } };
@@ -4916,6 +5160,8 @@ function priceOf(r) {
   const m = p[1].match(/(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})/); if (!m) return null;
   return +(m[1].replace(/\./g, '') + '.' + m[2]);
 }
+// customer copy: the catalogue shows only the price letter ("A", "H"...), never the euro price
+const letterOf = r => { const p = (r.f || []).find(([k, v]) => /^prezz/i.test(k) && /^[A-Z]{1,2}$/.test(String(v).trim())); return p ? String(p[1]).trim() : ''; };
 function unitOf(r) { const p = (r.f || []).find(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(v)); const m = p && p[0].match(/prezzo\s*(mt|mq|pz|kg|lt|m)\b/i); return m ? m[1].toLowerCase() : ''; }
 function descOf(r) {
   const t = famTitle(r);
@@ -4934,7 +5180,7 @@ function descOf(r) {
   for (const [k0, v0] of r.f || []) {
     const k = String(k0 || '').trim(), v = String(v0 || '').trim();
     if (!/^prezz/i.test(k)) continue;
-    if (v && !/\d,\d{2}/.test(v)) pk.push(k + ' ' + v);
+    if (v && !/\d,\d{2}/.test(v) && !(CLI && /^[A-Z]{1,2}$/.test(v))) pk.push(k + ' ' + v);
     else if (!/^prezzo\s*(mt|mq|pz|kg|lt|m)?$/i.test(k)) pk.push(k);
   }
   if (pk.length) s += ' (' + pk.join(', ') + ')';
@@ -4952,7 +5198,7 @@ function linesOf(items) {
   return items.map(it => {
     const i = rowOf(it.c); if (i < 0) return null;
     const r = INDEX.rows[i], cat = priceOf(r), p = !CLI && it.p != null ? it.p : cat, unit = unitOf(r), q = qfix(it.q, unit);
-    return { it, i, r, c: it.c, desc: descOf(r), unit, cat, p, q, tot: p == null ? null : Math.round(p * q * 100) / 100 };
+    return { it, i, r, c: it.c, desc: descOf(r), unit, cat, p, q, tot: p == null ? null : Math.round(p * q * 100) / 100, let: CLI ? letterOf(r) : '' };
   }).filter(Boolean);
 }
 const total = ls => Math.round(ls.reduce((s, l) => s + (l.tot || 0), 0) * 100) / 100;
@@ -4984,7 +5230,7 @@ function badge() {
   if (!b) { b = document.createElement('b'); b.className = 'nv-badge'; t.appendChild(b); }
   b.textContent = n > 99 ? '99+' : n;
 }
-function save() { lset(L); badge(); }
+function save() { lset(L); badge(); if (L.sid) folderSync(); }
 function addCode(c) {
   L = lget();
   const x = L.items.find(y => y.c === c);
@@ -5014,7 +5260,7 @@ sheet.innerHTML = `<div class="bhead"><div class="wrap">
   <div class="wrap" style="padding-top:10px;padding-bottom:70px;display:grid;gap:10px" id="listBody"></div>`;
 document.body.appendChild(sheet);
 function listOpen() {
-  L = lget(); sheet.hidden = false; sheet.scrollTop = 0; document.body.style.overflow = 'hidden'; listRender();
+  L = lget(); sview = false; sform = false; sheet.hidden = false; sheet.scrollTop = 0; document.body.style.overflow = 'hidden'; listRender();
 }
 function listClose() {
   sheet.hidden = true;
@@ -5027,31 +5273,106 @@ function listRender() {
   const gone = ready() ? L.items.filter(x => rowOf(x.c) < 0) : [];
   const goneHtml = gone.length ? `<div class="nv-lrow nv-gone"><b>${gone.length === 1 ? 'Questo articolo non è più nel catalogo' : 'Questi articoli non sono più nel catalogo'}</b><small>${gone.length === 1 ? 'Non conta nel totale e non viene inviato.' : 'Non contano nel totale e non vengono inviati.'}</small>${gone.map(x => `<div class="g"><span>${fmtCode(x.c)}</span><button class="x" type="button" data-ldel="${x.c}" aria-label="Togli dalla lista">✕</button></div>`).join('')}</div>` : '';
   $$('listSub').textContent = ls.length ? (ls.length === 1 ? '1 articolo' : ls.length + ' articoli') + (noPdf() ? ' · si invia come messaggio' : ' · si invia come PDF o come messaggio') : '';
-  
-  const bar = CLI ? '' : sbarHtml();
+  if (sview) { savedRender(); return; }
+  const bar = sbarHtml();
   if (!ls.length) {
-    body.innerHTML = bar + goneHtml + `<div class="empty"><b>La lista è vuota</b>Apri un articolo e tocca <b style="display:inline;font-size:inherit">+ Lista</b>: lo trovi qui, con quantità${CLI ? ' e prezzo' : ' e prezzo che puoi cambiare'}.</div>`;
+    body.innerHTML = bar + goneHtml + `<div class="empty"><b>La lista è vuota</b>Apri un articolo e tocca <b style="display:inline;font-size:inherit">+ Lista</b>: lo trovi qui, con quantità${CLI ? ' e lettera' : ' e prezzo che puoi cambiare'}.</div>`;
     return;
   }
   body.innerHTML = bar + (CLI ? '' : `<label class="nv-lfield">Cliente (facoltativo)<input id="listCli" type="text" maxlength="80" autocomplete="off" placeholder="Nome del cliente o della barca" value="${escH(L.cliente || '')}"></label>`)
-    + ls.map(l => `<div class="nv-lrow" data-lc="${l.c}"><div class="top"><span class="nv-lth" data-thumb="${l.i}"></span><button class="t" type="button" data-i="${l.i}"><b>${fmtCode(l.c)}</b><span>${escH(l.desc)}</span>${l.cat == null ? (CLI ? '<small>Prezzo da definire</small>' : '<small>Prezzo non indicato nel catalogo: scrivilo tu</small>') : ''}</button><button class="x" type="button" data-ldel="${l.c}" aria-label="Togli dalla lista">✕</button></div>
+    + ls.map(l => `<div class="nv-lrow" data-lc="${l.c}"><div class="top"><span class="nv-lth" data-thumb="${l.i}"></span><button class="t" type="button" data-i="${l.i}"><b>${fmtCode(l.c)}</b><span>${escH(l.desc)}</span>${l.cat == null && !CLI ? '<small>Prezzo non indicato nel catalogo: scrivilo tu</small>' : ''}</button><button class="x" type="button" data-ldel="${l.c}" aria-label="Togli dalla lista">✕</button></div>
       <div class="nums"><span class="nv-step"><button type="button" data-lq="-1" aria-label="Meno">−</button><input type="text" inputmode="${decUnit(l.unit) ? 'decimal' : 'numeric'}" data-lqi value="${qtxt(l.q)}" aria-label="Quantità"><button type="button" data-lq="1" aria-label="Più">+</button></span>
-      ${CLI ? `<span class="nv-price ro">${l.cat == null ? '' : '€ ' + eur(l.cat) + (l.unit ? '/' + l.unit : '')}</span>` : `<label class="nv-price${l.it.p != null && l.it.p !== l.cat ? ' edited' : ''}">€<input type="text" inputmode="decimal" data-lp value="${l.p == null ? '' : eur(l.p)}" placeholder="prezzo" aria-label="Prezzo cadauno">${l.unit ? '/' + l.unit : ''}</label>`}
-      <span class="tot" data-ltot>${l.tot == null ? '' : '€ ' + eur(l.tot)}</span></div></div>`).join('') + goneHtml
-    + `<div class="nv-ltotal"><span>Totale</span><span id="listTot">€ ${eur(total(ls))}</span></div>
+      ${CLI ? `<span class="nv-price ro nv-let">${escH(l.let)}</span>` : `<label class="nv-price${l.it.p != null && l.it.p !== l.cat ? ' edited' : ''}">€<input type="text" inputmode="decimal" data-lp value="${l.p == null ? '' : eur(l.p)}" placeholder="prezzo" aria-label="Prezzo cadauno">${l.unit ? '/' + l.unit : ''}</label>`}
+      <span class="tot" data-ltot>${l.tot == null || CLI ? '' : '€ ' + eur(l.tot)}</span></div></div>`).join('') + goneHtml
+    + `${CLI ? '' : `<div class="nv-ltotal"><span>Totale</span><span id="listTot">€ ${eur(total(ls))}</span></div>`}
     ${CLI ? '' : `<div class="nv-lsc"><label class="nv-lfield">Sconto %<input id="listSc1" type="text" inputmode="decimal" maxlength="6" placeholder="es. 20" value="${L.sc1 == null ? '' : String(L.sc1).replace('.', ',')}"></label><label class="nv-lfield">Extra sconto %<input id="listSc2" type="text" inputmode="decimal" maxlength="6" placeholder="es. 5" value="${L.sc2 == null ? '' : String(L.sc2).replace('.', ',')}"></label></div>
     <div id="listDisc">${discHtml(ls)}</div>`}
     <label class="nv-lfield">Note (facoltative)<textarea id="listNote" rows="2" maxlength="600" placeholder="${CLI ? 'Es. promemoria' : 'Es. consegna, sconto, validità'}">${escH(L.note || '')}</textarea></label>
     ${noPdf() ? '' : `<label class="nv-lfoto"><input type="checkbox" id="listFoto"${fotoOn() ? ' checked' : ''}> Foto degli articoli nel PDF</label>`}
-    <div class="nv-lact">${noPdf() ? '<button type="button" id="listMsg" style="grid-column:1/-1">Invia lista</button>' : '<button type="button" id="listPdf">Invia PDF</button><button type="button" class="alt" id="listMsg">Invia messaggio</button>'}${CLI ? '' : saveBtnHtml()}${!CLI && L.sid ? '' : '<button type="button" class="del" id="listClear">Svuota la lista</button>'}</div>
+    <div class="nv-lact">${noPdf() ? '<button type="button" id="listMsg" style="grid-column:1/-1">Invia lista</button>' : '<button type="button" id="listPdf">Invia PDF</button><button type="button" class="alt" id="listMsg">Invia messaggio</button>'}${saveBtnHtml()}${L.sid ? '' : '<button type="button" class="del" id="listClear">Svuota la lista</button>'}</div>
     ${CLI ? '' : `<p class="nv-lhelp">Il prezzo che cambi vale solo per questa lista: il catalogo resta com'è.</p>`}`;
   try { if (typeof hydrateThumbs === 'function') hydrateThumbs(); } catch (e) {}
   if (!noPdf() && fotoOn()) setTimeout(() => warmImgs(lines()), 400);
 }
-
+// ---- Liste salvate (both copies; customers asked by Sergio 28-10-2026: no prices there either): ogni lista si salva con un nome, come una cartella, e se ne comincia un'altra.
+// Una lista riaperta resta collegata alla sua cartella: quello che cambi si salva anche lì.
+const SKEY = CLI ? 'listeSalvateClienti' : 'listeSalvate', SMAX = 200;
+let sview = false, sform = false;
+const FOLD = '<svg class="nv-fold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+function sget() {
+  let v = null; try { v = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) {}
+  return Array.isArray(v) ? v.filter(f => f && typeof f.id === 'string' && typeof f.name === 'string' && f.d && Array.isArray(f.d.items)) : [];
+}
+function sset(a) { try { localStorage.setItem(SKEY, JSON.stringify(a)); return true; } catch (e) { say('Memoria del telefono piena: la lista non è stata salvata'); return false; } }
+// adds a saved list, keeping only the newest SMAX; false when the phone memory is full (nothing changes then)
+function spush(a, f, keep) {
+  a.push(f); a.sort((x, y) => y.at - x.at); const out = [];
+  while (a.length > SMAX) { const k = a.map(x => x.id).lastIndexOf(a.filter(x => x.id !== keep).pop().id); out.push(a.splice(k, 1)[0].name); }  // the oldest go, never the one being opened
+  return sset(a) && out;  // the names taken away (an empty list is still a success)
+}
+const snap = () => ({ items: L.items.map(x => ({ c: x.c, q: x.q, p: x.p })), cliente: L.cliente || '', note: L.note || '', sc1: L.sc1, sc2: L.sc2 });
+function folderSync() {
+  const a = sget(), f = a.find(x => x.id === L.sid);
+  if (!f) { delete L.sid; lset(L); return; }
+  f.d = snap(); f.at = Date.now(); sset(a);
+}
+const when = t => { const d = new Date(t); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const stot = d => { const ls = linesOf(d.items); return { n: ls.length, t: total(ls) }; };
+function sbarHtml() {
+  const n = sget().length, f = L.sid && sget().find(x => x.id === L.sid);
+  return `<div class="nv-sbar"><div class="cur">${f ? FOLD + `<span>${escH(f.name)}</span>` : ''}</div><button type="button" class="nv-sbtn" id="listSaved">${FOLD}Liste salvate${n ? ` <b>${n}</b>` : ''}</button></div>`;
+}
+function saveBtnHtml() {
+  if (sform) return `<div class="nv-sform"><label class="nv-lfield">Nome della lista<input id="listSName" type="text" maxlength="60" autocomplete="off" placeholder="${CLI ? 'Es. Barca – lavori di primavera' : 'Es. Rossi – barca Aurora'}" value="${escH((L.cliente || '').trim())}"></label><div class="row nv-lact"><button type="button" id="listSOk">Salva</button><button type="button" class="alt" id="listSNo">Annulla</button></div></div>`;
+  return L.sid ? `<button type="button" class="save" id="listNew">${FOLD}Fatto: comincia una nuova lista</button>` : `<button type="button" class="save" id="listSave">${FOLD}Salva la lista e fanne un'altra</button>`;
+}
+function savedRender() {
+  const a = sget().sort((x, y) => y.at - x.at), body = $$('listBody');
+  $$('listSub').textContent = a.length ? (a.length === 1 ? '1 lista salvata' : a.length + ' liste salvate') : '';
+  body.innerHTML = `<div class="nv-sbar"><button type="button" class="nv-sbtn" id="listBackCur" style="margin-left:0">‹ Lista attuale</button></div>`
+    + (a.length ? a.map(f => { const t = stot(f.d); return `<div class="nv-scard${f.id === L.sid ? ' on' : ''}"><button type="button" class="o" data-sopen="${f.id}"><span class="ic">${FOLD}</span><span><b>${escH(f.name)}</b><small>${when(f.at)}</small><em>${t.n === 1 ? '1 articolo' : t.n + ' articoli'}${CLI ? '' : ' · € ' + eur(t.t)}</em></span></button><button type="button" class="x" data-sdel="${f.id}" aria-label="Elimina la lista salvata">✕</button></div>`; }).join('')
+      : `<div class="empty"><b>Nessuna lista salvata</b>Nella lista tocca <b style="display:inline;font-size:inherit">Salva la lista</b>: la ritrovi qui, con quantità${CLI ? ' e note' : ', prezzi, sconti e note'}.</div>`);
+}
+function sopen(id) {
+  const a = sget(), f = a.find(x => x.id === id); if (!f) return;
+  // the list being prepared is never lost: if it was not saved, it becomes a saved list of its own
+  let kept = false;
+  if (!L.sid && L.items.length) {
+    if (!spush(a, { id: 'l' + Date.now().toString(36), name: (L.cliente || '').trim() || 'Lista del ' + when(Date.now()), at: Date.now(), d: snap() }, id)) { say('Memoria piena: la lista che stai facendo non si può salvare, quindi resta aperta'); return; }
+    kept = true;
+  }
+  L = { items: f.d.items.map(x => ({ c: x.c, q: x.q, p: x.p })), cliente: f.d.cliente || '', note: f.d.note || '', sc1: f.d.sc1 == null ? null : f.d.sc1, sc2: f.d.sc2 == null ? null : f.d.sc2, sid: f.id };
+  lset(L); L = lget(); badge(); sview = false; sform = false; listRender(); sheet.scrollTop = 0;
+  if (kept) say('La lista che stavi facendo è nelle liste salvate');
+}
+sheet.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('#listSaved')) { sview = true; sform = false; listRender(); sheet.scrollTop = 0; return; }
+  if (t.closest('#listBackCur')) { sview = false; listRender(); sheet.scrollTop = 0; return; }
+  if (t.closest('#listSave')) { sform = true; listRender(); const i = $$('listSName'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); i.select(); } return; }
+  if (t.closest('#listSNo')) { sform = false; listRender(); return; }
+  if (t.closest('#listSOk')) {
+    const name = ($$('listSName').value || '').trim() || (L.cliente || '').trim() || 'Lista del ' + when(Date.now());
+    const gone = spush(sget(), { id: 'l' + Date.now().toString(36), name, at: Date.now(), d: snap() }); if (!gone) return;
+    sform = false; L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; save(); listRender(); sheet.scrollTop = 0;
+    say('Salvata in Liste salvate: ' + name + (gone.length ? ' (si tengono al massimo ' + SMAX + ' liste: tolta la più vecchia, ' + gone.join(', ') + ')' : '')); return;
+  }
+  if (t.closest('#listNew')) { L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; save(); listRender(); sheet.scrollTop = 0; say('Lista salvata. Ora puoi farne una nuova'); return; }
+  const o = t.closest('[data-sopen]'); if (o) { sopen(o.dataset.sopen); return; }
+  const d = t.closest('[data-sdel]');
+  if (d) {
+    if (!d.classList.contains('sure')) { d.classList.add('sure'); d.textContent = 'Elimina'; setTimeout(() => { if (d.isConnected) { d.classList.remove('sure'); d.textContent = '✕'; } }, 3500); return; }
+    const id = d.dataset.sdel; sset(sget().filter(x => x.id !== id));
+    // the open list deleted: it goes away completely, it never comes back as a list to save
+    if (L.sid === id) { L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; lset(L); badge(); }
+    savedRender(); say('Lista eliminata'); return;
+  }
+});
+sheet.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'listSName') { e.preventDefault(); $$('listSOk').click(); } });
 function rowUpdate(el) {
   const c = el.dataset.lc, it = L.items.find(x => x.c === c); if (!it) return;
   const ls = lines(), l = ls.find(x => x.c === c); if (!l) return;
+  if (CLI) return;  // customer copy: no amounts to update
   el.querySelector('[data-ltot]').textContent = l.tot == null ? '' : '€ ' + eur(l.tot);
   el.querySelector('.nv-price').classList.toggle('edited', it.p != null && it.p !== l.cat);
   $$('listTot').textContent = '€ ' + eur(total(ls));
@@ -5143,6 +5464,11 @@ function msgText(ls) {
   const out = [CLI ? '*Lista articoli* ' + today() : '*Battagli Marine Hardware* – Lista articoli ' + today()];
   if (!CLI && (L.cliente || '').trim()) out.push('Cliente: ' + L.cliente.trim());
   out.push('');
+  if (CLI) {  // only code, description, quantity and price letter
+    for (const l of ls) out.push('• ' + fmtCode(l.c) + ' ' + l.desc, '   Q.tà ' + qtxt(l.q) + (decUnit(l.unit) ? ' ' + l.unit : '') + (l.let ? ' · ' + l.let : ''));
+    if ((L.note || '').trim()) out.push('', 'Note: ' + L.note.trim());
+    return out.join('\n');
+  }
   for (const l of ls) out.push('• ' + fmtCode(l.c) + ' ' + l.desc, '   ' + qtxt(l.q) + (decUnit(l.unit) ? ' ' + l.unit : '') + ' x ' + (l.p == null ? 'prezzo da definire' : '€ ' + eur(l.p) + (l.unit ? '/' + l.unit : '') + ' = € ' + eur(l.tot)));
   const dl = discOut(ls);
   out.push('', '*Totale € ' + eur(total(ls)) + '*' + (ls.some(l => l.p == null) ? ' (alcuni prezzi da definire)' : ''));
@@ -5209,7 +5535,7 @@ function buildPdf(ls) {
   const txt = (x, yy, s, size, bold, right, gray) => { s = enc(s); const xx = right ? x - tw(s, size, bold) : x; ops.push((gray ? '0.4 g ' : '0 g ') + 'BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + xx.toFixed(2) + ' ' + yy.toFixed(2) + ' Td ' + pstr(s) + ' Tj ET'); };
   const line = (x1, yy, x2, w, g) => ops.push((g == null ? 0.75 : g) + ' G ' + (w || 0.6) + ' w ' + x1.toFixed(2) + ' ' + yy.toFixed(2) + ' m ' + x2.toFixed(2) + ' ' + yy.toFixed(2) + ' l S');
   // columns: code | description | qty | price | total
-  const IW = 46, X = { img: M, code: M + IW + 8, desc: M + IW + 82, qtyR: PW - M - 150, priceR: PW - M - 72, totR: PW - M }, DW = X.qtyR - 38 - X.desc;
+  const IW = 46, X = { img: M, code: M + IW + 8, desc: M + IW + 82, qtyR: PW - M - (CLI ? 70 : 150), priceR: PW - M - 72, totR: PW - M }, DW = X.qtyR - 38 - X.desc;
   const imgs = [], used = [];
   const head = first => {
     if (first) {
@@ -5222,7 +5548,7 @@ function buildPdf(ls) {
       y = PH - M - 54; }
       if (!CLI && (L.cliente || '').trim()) { for (const s of wrap(enc('Cliente: ' + L.cliente.trim()), 11, true, PW - 2 * M, 2)) { txt(M, y, s, 11, true); y -= 14; } y -= 6; }
     } else { txt(M, PH - M - 12, CLI ? 'Lista articoli (segue)' : 'Battagli Marine Hardware - Lista articoli (segue)', 10, false, false, true); y = PH - M - 30; }
-    txt(X.code, y, 'Codice', 9, true); txt(X.desc, y, 'Descrizione', 9, true); txt(X.qtyR, y, 'Q.tà', 9, true, true); txt(X.priceR, y, 'Prezzo €', 9, true, true); txt(X.totR, y, 'Totale €', 9, true, true);
+    txt(X.code, y, 'Codice', 9, true); txt(X.desc, y, 'Descrizione', 9, true); txt(X.qtyR, y, 'Q.tà', 9, true, true); if (CLI) txt(X.totR, y, 'Lettera', 9, true, true); else { txt(X.priceR, y, 'Prezzo €', 9, true, true); txt(X.totR, y, 'Totale €', 9, true, true); }
     y -= 6; line(M, y, PW - M, 0.8, 0); y -= 13;
   };
   const newPage = () => { pages.push(ops); used.push(cur); ops = []; cur = new Set(); head(false); };
@@ -5239,12 +5565,13 @@ function buildPdf(ls) {
     txt(X.code, y, fmtCode(l.c), 9.5, true);
     d.forEach((s, k) => txt(X.desc, y - k * 11.5, s, 9.5, false));
     txt(X.qtyR, y, qtxt(l.q), 9.5, false, true);
-    txt(X.priceR, y, l.p == null ? '-' : eur(l.p) + (l.unit ? '/' + l.unit : ''), 9.5, false, true);
-    txt(X.totR, y, l.tot == null ? '-' : eur(l.tot), 9.5, true, true);
+    if (CLI) txt(X.totR, y, l.let || '-', 9.5, true, true);
+    else { txt(X.priceR, y, l.p == null ? '-' : eur(l.p) + (l.unit ? '/' + l.unit : ''), 9.5, false, true);
+    txt(X.totR, y, l.tot == null ? '-' : eur(l.tot), 9.5, true, true); }
     y -= h - 9.5; line(M, y, PW - M, 0.4); y -= 13;
   }
   if (y < M + 60 + discOut(ls).length * 14) newPage();
-  const tt = '€ ' + eur(total(ls)); y -= 4; txt(Math.min(X.priceR, X.totR - tw(enc(tt), 11, true) - 12), y, 'Totale', 11, true, true); txt(X.totR, y, tt, 11, true, true); y -= 14;
+  const tt = '€ ' + eur(total(ls)); y -= 4; if (!CLI) txt(Math.min(X.priceR, X.totR - tw(enc(tt), 11, true) - 12), y, 'Totale', 11, true, true); if (!CLI) { txt(X.totR, y, tt, 11, true, true); y -= 14; }
   const dO = discOut(ls);
   if (dO.length) {  // its own box under the total
     y -= 6; const bh = dO.length * 15 + 10, bx = X.priceR - 90;
@@ -5252,7 +5579,7 @@ function buildPdf(ls) {
     y -= 4; for (const [k, v] of dO) { txt(bx + 8, y, k, 10.5, true); txt(X.totR - 8, y, v, 10.5, true, true); y -= 15; }
     y -= 6;
   }
-  if (ls.some(l => l.p == null)) { txt(X.totR, y, 'Alcuni prezzi sono da definire', 8.5, false, true, true); y -= 12; }
+  if (!CLI && ls.some(l => l.p == null)) { txt(X.totR, y, 'Alcuni prezzi sono da definire', 8.5, false, true, true); y -= 12; }
   const note = (L.note || '').trim();
   if (note) {
     y -= 10; const nl = [].concat(...note.split(/\r?\n/).map(p => p.trim() ? wrap(enc(p), 9.5, false, PW - 2 * M) : [''])).slice(0, 40);
