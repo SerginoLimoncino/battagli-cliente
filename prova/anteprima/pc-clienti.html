@@ -957,7 +957,7 @@ const REPARTI = {
   '36': 'Accessori e vela-rig', '37': 'Viteria inox', '42': 'Attrezzatura di coperta', '43': 'Pesca sub tempo libero',
   '44': 'Merchandising MH',
 };
-const PDFJS = './lib/';
+const PDFJS = '../../lib/';
 const STANDALONE = true;
 const MAX_ASSET = 20 * 1024 * 1024;
 
@@ -1449,10 +1449,10 @@ function openZoom(src) {
 })();
 
 // ---- Photo search: MobileNet embeddings of every catalogue photo, computed on the device ----
-const TF_URL = './lib/tf.min.js';
-const TFL_URL = './lib/tf-tflite.min.js';
-const TFL_WASM = './lib/';
-const MODEL_URL = './lib/emb.tflite';
+const TF_URL = '../../lib/tf.min.js';
+const TFL_URL = '../../lib/tf-tflite.min.js';
+const TFL_WASM = '../../lib/';
+const MODEL_URL = '../../lib/emb.tflite';
 const MODEL_B64 = ''/*MODELB64*/;
 const VIS = { crops: [0, .75, .55], items: [], mat: null, n: 0, ready: false, building: false, token: 0, pct: 0, model: null, modelP: null, note: '' };
 function b64buf(b) { const t = atob(b), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u.buffer; }
@@ -1594,7 +1594,7 @@ async function visQuery(src, sw, sh) {
   const idx = Array.from(sc.keys()).sort((a, b) => sc[b] - sc[a]).slice(0, 12);
   return idx.map(k => ({ item: VIS.items[k], score: sc[k] }));
 }
-const TESS = { lib: './lib/tess/tesseract.min.js', worker: './lib/tess/worker.min.js', core: './lib/tess/', lang: './lib/tess/', blob: false };
+const TESS = { lib: '../../lib/tess/tesseract.min.js', worker: '../../lib/tess/worker.min.js', core: '../../lib/tess/', lang: '../../lib/tess/', blob: false };
 let ocrP = null;
 function ocrWorker() {
   if (ocrP) return ocrP;
@@ -2354,8 +2354,8 @@ const SITE_CAT = 'https://serginolimoncino.github.io/battagli-cliente/prova/CATA
 async function siteCatalog() {
   const cur = await idbGet('index');
   let loc = null;
-  try { const r = await fetch('./catalog/info.json', { cache: 'no-store' }); if (r.ok) loc = (await r.json()) || {}; } catch (e) {}
-  if (!loc) try { const r = await fetch('./catalog/index.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
+  try { const r = await fetch('../catalog/info.json', { cache: 'no-store' }); if (r.ok) loc = (await r.json()) || {}; } catch (e) {}
+  if (!loc) try { const r = await fetch('../catalog/index.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
   let info = null;
   try { const r = await fetch(SITE_CAT + 'info.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) {}
   if (!info || !info.at) return false;
@@ -2420,11 +2420,11 @@ async function siteCatalog() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
   try {
     if (!(await idbGet('index'))) {
-      const r = await fetch('./catalog/index.json');
+      const r = await fetch('../catalog/index.json');
       if (r.ok) {
         const idx = await r.json();
         if (idx && idx.rows && idx.rows.length) {
-          const p = await fetch('./catalog/catalogo.pdf');
+          const p = await fetch('../catalog/catalogo.pdf');
           if (p.ok) { await idbSet('pdf', await p.blob()); await idbSet('pdfKey', idx.at); }
           await idbSet('index', idx); await idbSet('meta', {});
         }

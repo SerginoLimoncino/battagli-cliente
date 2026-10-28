@@ -929,7 +929,7 @@ const REPARTI = {
   '36': 'Accessori e vela-rig', '37': 'Viteria inox', '42': 'Attrezzatura di coperta', '43': 'Pesca sub tempo libero',
   '44': 'Merchandising MH',
 };
-const PDFJS = './lib/';
+const PDFJS = '../../lib/';
 const STANDALONE = true;
 const MAX_ASSET = 20 * 1024 * 1024;
 
@@ -1421,10 +1421,10 @@ function openZoom(src) {
 })();
 
 // ---- Photo search: MobileNet embeddings of every catalogue photo, computed on the device ----
-const TF_URL = './lib/tf.min.js';
-const TFL_URL = './lib/tf-tflite.min.js';
-const TFL_WASM = './lib/';
-const MODEL_URL = './lib/emb.tflite';
+const TF_URL = '../../lib/tf.min.js';
+const TFL_URL = '../../lib/tf-tflite.min.js';
+const TFL_WASM = '../../lib/';
+const MODEL_URL = '../../lib/emb.tflite';
 const MODEL_B64 = ''/*MODELB64*/;
 const VIS = { crops: [0, .75, .55], items: [], mat: null, n: 0, ready: false, building: false, token: 0, pct: 0, model: null, modelP: null, note: '' };
 function b64buf(b) { const t = atob(b), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u.buffer; }
@@ -1566,10 +1566,10 @@ async function visQuery(src, sw, sh) {
   const idx = Array.from(sc.keys()).sort((a, b) => sc[b] - sc[a]).slice(0, 12);
   return idx.map(k => ({ item: VIS.items[k], score: sc[k] }));
 }
-const TESS = { lib: './lib/tess/tesseract.min.js', worker: './lib/tess/worker.min.js', core: './lib/tess/tesseract-core-lstm.wasm.js', lang: './lib/tess/', blob: false };
+const TESS = { lib: '../../lib/tess/tesseract.min.js', worker: '../../lib/tess/worker.min.js', core: '../../lib/tess/tesseract-core-lstm.wasm.js', lang: '../../lib/tess/', blob: false };
 
 // ---- Reading article codes from a photo: barcode first, then text (OCR) on the white labels ----
-const ZX = { lib: './lib/zx/zxing_reader.js', wasm: './lib/zx/zxing_reader.wasm' };
+const ZX = { lib: '../../lib/zx/zxing_reader.js', wasm: '../../lib/zx/zxing_reader.wasm' };
 let zxP = null;
 function zxReady() {
   if (zxP) return zxP;
@@ -1878,7 +1878,7 @@ async function ppTta(P, cv, lines, res, isLive) {
   return Object.assign({}, res, { near: costs.map(x => x.code) });
 }
 // ---------- strong reader (PP-OCR) ----------
-const PP_BASES = ['./lib/pp/', 'https://serginolimoncino.github.io/battagli-cliente/lib/pp/'];
+const PP_BASES = ['../../lib/pp/', 'https://serginolimoncino.github.io/battagli-cliente/lib/pp/'];
 let ppP = null;
 function ppReady() {
   if (ppP) return ppP;
@@ -2816,7 +2816,7 @@ window.__importFailed = () => { overlay(false); toast('Il file ricevuto non è u
 // A shared app carries its catalogue: install it on first start, or when it is newer than the one here.
 async function importBundled(boot) {
   let info = null;
-  try { const r = await fetch('./catalog/info.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch {}
+  try { const r = await fetch('../catalog/info.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch {}
   if (!info || !info.at) return false;
   const cur = await idbGet('index');
   if (cur && cur.rows && cur.rows.length && cur.at >= info.at) { try { APP && APP.importDone(); } catch {} return true; }
@@ -2825,9 +2825,9 @@ async function importBundled(boot) {
   const curKey = await idbGet('pdfKey');
   try {
     overlay(true, 'Preparo il catalogo', 'Copio il catalogo nell\'app…', 0.1);
-    const idx = await (await fetch('./catalog/index.json', { cache: 'no-store' })).json();
+    const idx = await (await fetch('../catalog/index.json', { cache: 'no-store' })).json();
     overlay(true, 'Preparo il catalogo', 'Copio il PDF…', 0.35);
-    const pr = await fetch('./catalog/catalogo.pdf'); if (!pr.ok) throw new Error('pdf');
+    const pr = await fetch('../catalog/catalogo.pdf'); if (!pr.ok) throw new Error('pdf');
     const total = +pr.headers.get('content-length') || info.size || 0; let got = 0; const parts = [];
     if (pr.body && pr.body.getReader) {
       const rd = pr.body.getReader();
@@ -2837,7 +2837,7 @@ async function importBundled(boot) {
     const pdf = new Blob(parts, { type: 'application/pdf' });
     if (!idx || !idx.rows || !idx.rows.length || !pdf.size) throw new Error('bundle');
     let vj = null, vb = null;
-    if (info.vis) try { overlay(true, 'Preparo il catalogo', 'Copio le foto per la ricerca…', 0.7); vj = await (await fetch('./catalog/vis.json')).json(); vb = new Uint8Array(await (await fetch('./catalog/vis.bin')).arrayBuffer()); } catch (e) { vj = null; }
+    if (info.vis) try { overlay(true, 'Preparo il catalogo', 'Copio le foto per la ricerca…', 0.7); vj = await (await fetch('../catalog/vis.json')).json(); vb = new Uint8Array(await (await fetch('../catalog/vis.bin')).arrayBuffer()); } catch (e) { vj = null; }
     // the PDF first, then the index: if the phone is full the catalogue in use keeps working
     overlay(true, 'Preparo il catalogo', 'Salvo il catalogo…', 0.8);
     await idbSet('pdfKey', 0);
@@ -2907,8 +2907,8 @@ const SITE_CAT = 'https://serginolimoncino.github.io/battagli-cliente/prova/CATA
 async function siteCatalog() {
   const cur = await idbGet('index');
   let loc = null;
-  try { const r = await fetch('./catalog/info.json', { cache: 'no-store' }); if (r.ok) loc = (await r.json()) || {}; } catch (e) {}
-  if (!loc) try { const r = await fetch('./catalog/index.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
+  try { const r = await fetch('../catalog/info.json', { cache: 'no-store' }); if (r.ok) loc = (await r.json()) || {}; } catch (e) {}
+  if (!loc) try { const r = await fetch('../catalog/index.json', { cache: 'no-store' }); if (r.ok) return false; } catch (e) {}
   let info = null;
   try { const r = await fetch(SITE_CAT + 'info.json', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) {}
   if (!info || !info.at) return false;
@@ -2974,11 +2974,11 @@ async function siteCatalog() {
   try { if (APP && APP.importBusy()) overlay(true, 'Preparo il catalogo', 'Apro il catalogo ricevuto…', 0.05); } catch {}
   try {
     if (!(await importBundled(true)) && !(await idbGet('index'))) {
-      const r = await fetch('./catalog/index.json');
+      const r = await fetch('../catalog/index.json');
       if (r.ok) {
         const idx = await r.json();
         if (idx && idx.rows && idx.rows.length) {
-          const p = await fetch('./catalog/catalogo.pdf');
+          const p = await fetch('../catalog/catalogo.pdf');
           if (p.ok) { await idbSet('pdf', await p.blob()); await idbSet('pdfKey', idx.at); }
           await idbSet('index', idx); await idbSet('meta', {});
         }
