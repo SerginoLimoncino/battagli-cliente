@@ -5225,7 +5225,7 @@ window.openRow = function (i) { const r = orig.apply(this, arguments); try { mou
 </script><script>
 // Novità 2.0 (build 26): ricerca a voce e "Forse cercavi…".
 // Lista: in both copies. Employee copy: "Lista per il cliente" with editable prices and the Battagli header.
-// Customer copy (CLI = true): "Lista dei desideri" on a plain white sheet, no name or logo, no euro prices: only code, quantity and the catalogue's price letter (Sergio 28-10-2026).
+// Customer copy (CLI = true): "Lista dei desideri" on a plain white sheet, no name or logo, no euro prices: only code, quantity and the catalogue's price letter (Sergio 28-10-2026). Liste salvate in both copies (customers too, kept apart in listeSalvateClienti).
 const CLI = true;
 
 // Tutto succede sul telefono: nessuna pagina esterna, nessun servizio online.
@@ -5316,7 +5316,28 @@ body[class*="nv-off-"] .tabbar .tab { flex: 1 1 0; }
 .nv-gone > small { color: var(--muted); font-size: 13px; }
 .nv-gone .g { display: flex; align-items: center; justify-content: space-between; font-family: var(--f-code); font-weight: 600; color: var(--muted); }
 .nv-gone .g .x { border: 0; background: var(--blue-soft); color: var(--blue); border-radius: 999px; width: 32px; height: 32px; font-weight: 800; }
+.nv-sbar { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.nv-sbar .cur { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--ink); overflow: hidden; }
+.nv-sbar .cur span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-sbar .cur small { color: var(--muted); font-weight: 600; font-size: 13px; }
+.nv-fold { width: 20px; height: 20px; flex: none; color: var(--blue); }
+.nv-sbtn { display: inline-flex; align-items: center; gap: 7px; flex: none; margin-left: auto; border: 0; border-radius: 999px; background: var(--blue-soft); color: var(--blue); padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 800; }
+.nv-sbtn b { background: var(--blue); color: #fff; border-radius: 999px; min-width: 20px; height: 20px; padding: 0 6px; font-size: 12px; display: inline-grid; place-items: center; }
 
+.nv-lact button.save { grid-column: 1 / -1; background: transparent; color: var(--blue); box-shadow: inset 0 0 0 1.5px var(--blue); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.nv-sform { grid-column: 1 / -1; display: grid; gap: 8px; background: var(--bg); border-radius: 16px; box-shadow: var(--card-shadow); padding: 12px; animation: nvAq .2s ease-out; }
+.nv-sform .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nv-scard { display: flex; align-items: center; gap: 12px; background: var(--bg); border-radius: 16px; box-shadow: var(--card-shadow); padding: 14px; }
+.nv-scard .o { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; color: var(--ink); }
+.nv-scard .o .ic { width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--blue-soft); display: grid; place-items: center; }
+.nv-scard .o .ic svg { width: 24px; height: 24px; color: var(--blue); }
+.nv-scard .o span { min-width: 0; display: grid; gap: 2px; }
+.nv-scard .o b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-scard .o small { color: var(--muted); font-size: 13px; }
+.nv-scard .o em { font-style: normal; font-weight: 800; color: var(--ink); font-size: 14px; }
+.nv-scard.on { box-shadow: 0 0 0 2px var(--blue), var(--card-shadow); }
+.nv-scard .x { flex: none; border: 0; border-radius: 999px; background: transparent; color: var(--muted); height: 36px; min-width: 36px; padding: 0 10px; font: inherit; font-size: 14px; font-weight: 800; }
+.nv-scard .x.sure { background: var(--red, #d33); color: #fff; }
 .chipbtn.nv-addl[aria-pressed="true"] { background: var(--blue); color: #fff; box-shadow: none; }
 
 .nv-addw, .bigcode span.nv-addw, .bigcode .nv-addw span { display: inline-flex; align-items: center; flex: none; font-family: var(--f-ui); font-size: 14px; letter-spacing: 0; line-height: normal; color: inherit; }
@@ -5665,7 +5686,7 @@ const lget = () => {
   const items = v.items.filter(x => x && typeof x.c === 'string' && /^\d{8}$/.test(x.c)).map(x => ({ c: x.c, q: isFinite(+x.q) && +x.q > 0 ? +x.q : 1, p: x.p == null || !isFinite(+x.p) || +x.p < 0 ? null : +x.p }));
   const pc = x => x == null || x === '' || !isFinite(+x) || +x <= 0 ? null : Math.min(100, Math.round(+x * 100) / 100);
   const o = { items, cliente: typeof v.cliente === 'string' ? v.cliente : '', note: typeof v.note === 'string' ? v.note : '', sc1: CLI ? null : pc(v.sc1), sc2: CLI ? null : pc(v.sc2) };  // customer copy: no discounts
-  if (!CLI && typeof v.sid === 'string') o.sid = v.sid;  // the saved list this one is (its changes are kept there too)
+  if (typeof v.sid === 'string') o.sid = v.sid;  // the saved list this one is (its changes are kept there too)
   return o;
 };
 const lset = v => { try { localStorage.setItem(LKEY, JSON.stringify(v)); } catch (e) { say('Memoria del telefono piena: la lista non è stata salvata'); } };
@@ -5745,7 +5766,7 @@ function badge() {
   if (!b) { b = document.createElement('b'); b.className = 'nv-badge'; t.appendChild(b); }
   b.textContent = n > 99 ? '99+' : n;
 }
-function save() { lset(L); badge(); }
+function save() { lset(L); badge(); if (L.sid) folderSync(); }
 function addCode(c) {
   L = lget();
   const x = L.items.find(y => y.c === c);
@@ -5775,7 +5796,7 @@ sheet.innerHTML = `<div class="bhead"><div class="wrap">
   <div class="wrap" style="padding-top:10px;padding-bottom:70px;display:grid;gap:10px" id="listBody"></div>`;
 document.body.appendChild(sheet);
 function listOpen() {
-  L = lget(); sheet.hidden = false; sheet.scrollTop = 0; document.body.style.overflow = 'hidden'; listRender();
+  L = lget(); sview = false; sform = false; sheet.hidden = false; sheet.scrollTop = 0; document.body.style.overflow = 'hidden'; listRender();
 }
 function listClose() {
   sheet.hidden = true;
@@ -5788,8 +5809,8 @@ function listRender() {
   const gone = ready() ? L.items.filter(x => rowOf(x.c) < 0) : [];
   const goneHtml = gone.length ? `<div class="nv-lrow nv-gone"><b>${gone.length === 1 ? 'Questo articolo non è più nel catalogo' : 'Questi articoli non sono più nel catalogo'}</b><small>${gone.length === 1 ? 'Non conta nel totale e non viene inviato.' : 'Non contano nel totale e non vengono inviati.'}</small>${gone.map(x => `<div class="g"><span>${fmtCode(x.c)}</span><button class="x" type="button" data-ldel="${x.c}" aria-label="Togli dalla lista">✕</button></div>`).join('')}</div>` : '';
   $$('listSub').textContent = ls.length ? (ls.length === 1 ? '1 articolo' : ls.length + ' articoli') + (noPdf() ? ' · si invia come messaggio' : ' · si invia come PDF o come messaggio') : '';
-  
-  const bar = CLI ? '' : sbarHtml();
+  if (sview) { savedRender(); return; }
+  const bar = sbarHtml();
   if (!ls.length) {
     body.innerHTML = bar + goneHtml + `<div class="empty"><b>La lista è vuota</b>Apri un articolo e tocca <b style="display:inline;font-size:inherit">+ Lista</b>: lo trovi qui, con quantità${CLI ? ' e lettera' : ' e prezzo che puoi cambiare'}.</div>`;
     return;
@@ -5804,12 +5825,86 @@ function listRender() {
     <div id="listDisc">${discHtml(ls)}</div>`}
     <label class="nv-lfield">Note (facoltative)<textarea id="listNote" rows="2" maxlength="600" placeholder="${CLI ? 'Es. promemoria' : 'Es. consegna, sconto, validità'}">${escH(L.note || '')}</textarea></label>
     ${noPdf() ? '' : `<label class="nv-lfoto"><input type="checkbox" id="listFoto"${fotoOn() ? ' checked' : ''}> Foto degli articoli nel PDF</label>`}
-    <div class="nv-lact">${noPdf() ? '<button type="button" id="listMsg" style="grid-column:1/-1">Invia lista</button>' : '<button type="button" id="listPdf">Invia PDF</button><button type="button" class="alt" id="listMsg">Invia messaggio</button>'}${CLI ? '' : saveBtnHtml()}${!CLI && L.sid ? '' : '<button type="button" class="del" id="listClear">Svuota la lista</button>'}</div>
+    <div class="nv-lact">${noPdf() ? '<button type="button" id="listMsg" style="grid-column:1/-1">Invia lista</button>' : '<button type="button" id="listPdf">Invia PDF</button><button type="button" class="alt" id="listMsg">Invia messaggio</button>'}${saveBtnHtml()}${L.sid ? '' : '<button type="button" class="del" id="listClear">Svuota la lista</button>'}</div>
     ${CLI ? '' : `<p class="nv-lhelp">Il prezzo che cambi vale solo per questa lista: il catalogo resta com'è.</p>`}`;
   try { if (typeof hydrateThumbs === 'function') hydrateThumbs(); } catch (e) {}
   if (!noPdf() && fotoOn()) setTimeout(() => warmImgs(lines()), 400);
 }
-
+// ---- Liste salvate (both copies; customers asked by Sergio 28-10-2026: no prices there either): ogni lista si salva con un nome, come una cartella, e se ne comincia un'altra.
+// Una lista riaperta resta collegata alla sua cartella: quello che cambi si salva anche lì.
+const SKEY = CLI ? 'listeSalvateClienti' : 'listeSalvate', SMAX = 200;
+let sview = false, sform = false;
+const FOLD = '<svg class="nv-fold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+function sget() {
+  let v = null; try { v = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) {}
+  return Array.isArray(v) ? v.filter(f => f && typeof f.id === 'string' && typeof f.name === 'string' && f.d && Array.isArray(f.d.items)) : [];
+}
+function sset(a) { try { localStorage.setItem(SKEY, JSON.stringify(a)); return true; } catch (e) { say('Memoria del telefono piena: la lista non è stata salvata'); return false; } }
+// adds a saved list, keeping only the newest SMAX; false when the phone memory is full (nothing changes then)
+function spush(a, f, keep) {
+  a.push(f); a.sort((x, y) => y.at - x.at); const out = [];
+  while (a.length > SMAX) { const k = a.map(x => x.id).lastIndexOf(a.filter(x => x.id !== keep).pop().id); out.push(a.splice(k, 1)[0].name); }  // the oldest go, never the one being opened
+  return sset(a) && out;  // the names taken away (an empty list is still a success)
+}
+const snap = () => ({ items: L.items.map(x => ({ c: x.c, q: x.q, p: x.p })), cliente: L.cliente || '', note: L.note || '', sc1: L.sc1, sc2: L.sc2 });
+function folderSync() {
+  const a = sget(), f = a.find(x => x.id === L.sid);
+  if (!f) { delete L.sid; lset(L); return; }
+  f.d = snap(); f.at = Date.now(); sset(a);
+}
+const when = t => { const d = new Date(t); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const stot = d => { const ls = linesOf(d.items); return { n: ls.length, t: total(ls) }; };
+function sbarHtml() {
+  const n = sget().length, f = L.sid && sget().find(x => x.id === L.sid);
+  return `<div class="nv-sbar"><div class="cur">${f ? FOLD + `<span>${escH(f.name)}</span>` : ''}</div><button type="button" class="nv-sbtn" id="listSaved">${FOLD}Liste salvate${n ? ` <b>${n}</b>` : ''}</button></div>`;
+}
+function saveBtnHtml() {
+  if (sform) return `<div class="nv-sform"><label class="nv-lfield">Nome della lista<input id="listSName" type="text" maxlength="60" autocomplete="off" placeholder="${CLI ? 'Es. Barca – lavori di primavera' : 'Es. Rossi – barca Aurora'}" value="${escH((L.cliente || '').trim())}"></label><div class="row nv-lact"><button type="button" id="listSOk">Salva</button><button type="button" class="alt" id="listSNo">Annulla</button></div></div>`;
+  return L.sid ? `<button type="button" class="save" id="listNew">${FOLD}Fatto: comincia una nuova lista</button>` : `<button type="button" class="save" id="listSave">${FOLD}Salva la lista e fanne un'altra</button>`;
+}
+function savedRender() {
+  const a = sget().sort((x, y) => y.at - x.at), body = $$('listBody');
+  $$('listSub').textContent = a.length ? (a.length === 1 ? '1 lista salvata' : a.length + ' liste salvate') : '';
+  body.innerHTML = `<div class="nv-sbar"><button type="button" class="nv-sbtn" id="listBackCur" style="margin-left:0">‹ Lista attuale</button></div>`
+    + (a.length ? a.map(f => { const t = stot(f.d); return `<div class="nv-scard${f.id === L.sid ? ' on' : ''}"><button type="button" class="o" data-sopen="${f.id}"><span class="ic">${FOLD}</span><span><b>${escH(f.name)}</b><small>${when(f.at)}</small><em>${t.n === 1 ? '1 articolo' : t.n + ' articoli'}${CLI ? '' : ' · € ' + eur(t.t)}</em></span></button><button type="button" class="x" data-sdel="${f.id}" aria-label="Elimina la lista salvata">✕</button></div>`; }).join('')
+      : `<div class="empty"><b>Nessuna lista salvata</b>Nella lista tocca <b style="display:inline;font-size:inherit">Salva la lista</b>: la ritrovi qui, con quantità${CLI ? ' e note' : ', prezzi, sconti e note'}.</div>`);
+}
+function sopen(id) {
+  const a = sget(), f = a.find(x => x.id === id); if (!f) return;
+  // the list being prepared is never lost: if it was not saved, it becomes a saved list of its own
+  let kept = false;
+  if (!L.sid && L.items.length) {
+    if (!spush(a, { id: 'l' + Date.now().toString(36), name: (L.cliente || '').trim() || 'Lista del ' + when(Date.now()), at: Date.now(), d: snap() }, id)) { say('Memoria piena: la lista che stai facendo non si può salvare, quindi resta aperta'); return; }
+    kept = true;
+  }
+  L = { items: f.d.items.map(x => ({ c: x.c, q: x.q, p: x.p })), cliente: f.d.cliente || '', note: f.d.note || '', sc1: f.d.sc1 == null ? null : f.d.sc1, sc2: f.d.sc2 == null ? null : f.d.sc2, sid: f.id };
+  lset(L); L = lget(); badge(); sview = false; sform = false; listRender(); sheet.scrollTop = 0;
+  if (kept) say('La lista che stavi facendo è nelle liste salvate');
+}
+sheet.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('#listSaved')) { sview = true; sform = false; listRender(); sheet.scrollTop = 0; return; }
+  if (t.closest('#listBackCur')) { sview = false; listRender(); sheet.scrollTop = 0; return; }
+  if (t.closest('#listSave')) { sform = true; listRender(); const i = $$('listSName'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); i.select(); } return; }
+  if (t.closest('#listSNo')) { sform = false; listRender(); return; }
+  if (t.closest('#listSOk')) {
+    const name = ($$('listSName').value || '').trim() || (L.cliente || '').trim() || 'Lista del ' + when(Date.now());
+    const gone = spush(sget(), { id: 'l' + Date.now().toString(36), name, at: Date.now(), d: snap() }); if (!gone) return;
+    sform = false; L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; save(); listRender(); sheet.scrollTop = 0;
+    say('Salvata in Liste salvate: ' + name + (gone.length ? ' (si tengono al massimo ' + SMAX + ' liste: tolta la più vecchia, ' + gone.join(', ') + ')' : '')); return;
+  }
+  if (t.closest('#listNew')) { L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; save(); listRender(); sheet.scrollTop = 0; say('Lista salvata. Ora puoi farne una nuova'); return; }
+  const o = t.closest('[data-sopen]'); if (o) { sopen(o.dataset.sopen); return; }
+  const d = t.closest('[data-sdel]');
+  if (d) {
+    if (!d.classList.contains('sure')) { d.classList.add('sure'); d.textContent = 'Elimina'; setTimeout(() => { if (d.isConnected) { d.classList.remove('sure'); d.textContent = '✕'; } }, 3500); return; }
+    const id = d.dataset.sdel; sset(sget().filter(x => x.id !== id));
+    // the open list deleted: it goes away completely, it never comes back as a list to save
+    if (L.sid === id) { L = { items: [], cliente: '', note: '', sc1: null, sc2: null }; lset(L); badge(); }
+    savedRender(); say('Lista eliminata'); return;
+  }
+});
+sheet.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'listSName') { e.preventDefault(); $$('listSOk').click(); } });
 function rowUpdate(el) {
   const c = el.dataset.lc, it = L.items.find(x => x.c === c); if (!it) return;
   const ls = lines(), l = ls.find(x => x.c === c); if (!l) return;
