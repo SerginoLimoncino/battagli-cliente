@@ -1012,11 +1012,11 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 let PRE = null;
 let PRE_SIG = '';
 const preSig = () => PRE_SIG || (PRE_SIG = (() => { const t = [normText, words, fmtCode, fold, buildVocab].map(f => String(f)).join('|') + [...STOP].join(','); let x = 0x811c9dc5; for (let k = 0; k < t.length; k++) { x ^= t.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16); })());
-const preKey = idx => [preSig() + '|clean1', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
+const preKey = idx => [preSig() + '|clean2', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
 let preT = 0;
 function savePre(idx) { clearTimeout(preT); const key = preKey(idx), d = { key, HAY, HAYT, HAYS, V: [...VOCAB] }; preT = setTimeout(() => { if (INDEX === idx) idbSet('pre', d); }, 4000); }
 function cleanIdx(idx) {
-  if (!idx || idx.example || !idx.rows || idx.cleanV === 1) return;
+  if (!idx || idx.example || !idx.rows || idx.cleanV === 2) return;
   let cli = false; try { cli = APP_ED === 'cliente'; } catch (e) {}
   for (const r of idx.rows) {
     if (!r || !r.f) continue;
@@ -1028,7 +1028,9 @@ function cleanIdx(idx) {
       return m ? [k, m[1]] : [k, v];
     }).filter(([k, v]) => !(/prezz/i.test(k) && v === ''));
   }
-  idx.cleanV = 1;
+  // clean2: prices in a field with no name ('0,60 A'), copies without prices only
+  for (const r of idx.rows) { if (r && r.f) r.f = r.f.filter(([k, v]) => k || !/^\s*(?:€\s*)?\d[\d.]*,\d{2}\s+[A-KM-UX-Z]\s*$/.test(String(v))); }
+  idx.cleanV = 2;
 }
 function setIndex(idx, meta) {
   cleanIdx(idx);
