@@ -6,7 +6,7 @@ https://serginolimoncino.github.io/battagli-cliente/
 SULL'iPHONE
 1. Apri l'indirizzo con Safari.
 2. Tasto Condividi (quadrato con freccia) > "Aggiungi alla schermata Home".
-3. Apri l'app dall'icona Battagli: il catalogo 24-09-2026 si carica da solo
+3. Apri l'app dall'icona Battagli: il catalogo 30-10-2026 si carica da solo
    la prima volta (serve internet per qualche minuto).
 4. Da quel momento funziona anche senza internet.
 
