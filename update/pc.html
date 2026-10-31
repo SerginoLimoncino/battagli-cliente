@@ -5,7 +5,175 @@
   Copyright (c) 2026 Sergio Tassoni. Tutti i diritti riservati.
   firma-autore-st
 -->
-<html lang="it"><head><meta charset="utf-8"><meta name="author" content="Sergio Tassoni"><meta name="copyright" content="(c) 2026 Sergio Tassoni"><meta name="generator" content="Catalogo Battagli di Sergio Tassoni"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+<html lang="it"><head><script id="migra-st">
+(function () {
+
+  var CHIAVI = ["fav", "recent", "hist", "cmp", "theme", "themePrima", "nvTabsOff", "listaFoto", "listaClienteC", "listeSalvateClienti"], ED = "cl", DBNOME = "";
+  function b64u(b) { var s = '', a = new Uint8Array(b); for (var i = 0; i < a.length; i += 32768) s += String.fromCharCode.apply(null, a.subarray(i, i + 32768)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var s = atob(t), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  // gzip when the browser has it ("z"), plain text otherwise ("j"): older phones lose nothing
+  async function impacchetta(o) {
+    var txt = JSON.stringify(o);
+    if (window.CompressionStream) try { return 'z' + b64u(await new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); } catch (e) {}
+    return 'j' + b64u(new TextEncoder().encode(txt));
+  }
+  async function spacchetta(t) {
+    var a = unb64u(t.slice(1));
+    if (t[0] === 'j') return JSON.parse(new TextDecoder().decode(a));
+    if (t[0] !== 'z' || !window.DecompressionStream) throw new Error('formato');
+    return JSON.parse(await new Response(new Blob([a]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
+  }
+  // a key a copy may take, with its value made safe for that copy
+  function adatta(k, v) {
+    if (CHIAVI.indexOf(k) < 0 || typeof v !== 'string') return null;
+    if (ED === 'cl' && /^(theme|themePrima)$/.test(k) && /spezia/i.test(v)) return null;  // customers never get the Spezia theme
+    if (ED === 'sp' && /^(listaCliente|listeSalvate)$/.test(k)) try {  // no-price copy: list prices and discounts stay behind
+      var o = JSON.parse(v);
+      (function via(x) { if (!x || typeof x !== 'object') return; if (Array.isArray(x.items)) x.items.forEach(function (i) { if (i && typeof i === 'object') i.p = null; });
+        if ('sc1' in x) x.sc1 = null; if ('sc2' in x) x.sc2 = null; for (var q in x) via(x[q]); })(o);
+      return JSON.stringify(o);
+    } catch (e) { return null; }
+    return v;
+  }
+  function idbKv(nome, scrivi) {
+    return new Promise(function (ok) {
+      if (!nome || !window.indexedDB) return ok(null);
+      var r; try { r = indexedDB.open(nome); } catch (e) { return ok(null); }
+      r.onupgradeneeded = function () { try { r.result.createObjectStore('kv'); } catch (e) {} };
+      r.onerror = function () { ok(null); };
+      r.onsuccess = function () {
+        var d = r.result;
+        try {
+          var t = d.transaction('kv', scrivi ? 'readwrite' : 'readonly'), st = t.objectStore('kv'), q = st.get('numeri'), v = null;
+          q.onsuccess = function () { v = q.result; if (scrivi && v == null && scrivi.numeri != null) st.put(scrivi.numeri, 'numeri'); };
+          t.oncomplete = t.onerror = t.onabort = function () { d.close(); ok(v); };
+        } catch (e) { d.close(); ok(null); }
+      };
+    });
+  }
+
+  var PRE = 'BATTAGLI-DATI:', PRIMA = {};
+  // what this device had BEFORE the app started: the app may write its own defaults while the data is unpacked
+  try { for (var i = 0; i < localStorage.length; i++) PRIMA[localStorage.key(i)] = 1; } catch (e) {}
+  async function applica(t) {
+    t = String(t || '').trim(); if (t.indexOf(PRE) === 0) t = t.slice(PRE.length);
+    var o = await spacchetta(t), n = 0;
+    if (!o || typeof o !== 'object' || !o.d) throw new Error('dati non validi');
+    for (var k in o.d) if (Object.prototype.hasOwnProperty.call(o.d, k) && !PRIMA[k]) { var v = adatta(k, o.d[k]); if (v != null) { localStorage.setItem(k, v); n++; } }
+    if (o.d.theme && !PRIMA.theme && adatta('theme', o.d.theme) != null) localStorage.setItem('temaAuto', 'false');  // temaAuto alone is the app's own default, not a choice  // the chosen theme stays, no automatic seasonal one
+    if (o.idb && o.idb.numeri && DBNOME) await idbKv(DBNOME, { numeri: o.idb.numeri });
+    localStorage.setItem('migratoDa', JSON.stringify({ t: Date.now(), n: n, da: o.da || '' }));
+    return n;
+  }
+  try {
+    var m = location.hash.match(/[#&]migra=([A-Za-z0-9_-]+)/);
+    if (m) {
+      history.replaceState(null, '', location.pathname + location.search);
+      applica(m[1]).then(function () { location.reload(); }, function () {});
+      return;
+    }
+    var app = (navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
+    if (!app || localStorage.getItem('migratoDa') || localStorage.getItem('migraNo') || localStorage.getItem('fav')) return;
+    document.addEventListener('DOMContentLoaded', function () {
+      var d = document.createElement('div');
+      d.setAttribute('style', 'position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));z-index:99999;background:#fff;color:#1d2530;border:1px solid #c9d1db;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:14px 16px;font:15px/1.4 system-ui,sans-serif');
+      d.innerHTML = '<b>Usavi già l\'app al vecchio indirizzo?</b><br>Se hai copiato i tuoi dati dalla vecchia app, tocca "Incolla i miei dati" per riaverli.'
+        + '<div style="display:flex;gap:8px;margin-top:10px"><button data-a="si" style="flex:1;padding:10px;border-radius:10px;border:0;background:#1f6feb;color:#fff;font-weight:600">Incolla i miei dati</button>'
+        + '<button data-a="no" style="padding:10px 14px;border-radius:10px;border:1px solid #c9d1db;background:#fff;color:#1d2530">No, grazie</button></div>';
+      d.addEventListener('click', async function (e) {
+        var a = e.target && e.target.getAttribute('data-a'); if (!a) return;
+        if (a === 'no') { localStorage.setItem('migraNo', '1'); d.remove(); return; }
+        var t = ''; try { t = await navigator.clipboard.readText(); } catch (x) {}
+        if (!t || t.indexOf(PRE) < 0) t = prompt('Tieni premuto qui sotto, scegli "Incolla", poi OK:') || '';
+        try { var n = await applica(t); alert('Fatto: dati ripresi (' + n + ').'); location.reload(); }
+        catch (x) { alert('Non trovo i dati copiati. Apri la vecchia app, tocca "Copia i miei dati" e riprova.'); }
+      });
+      document.body.appendChild(d);
+    });
+  } catch (e) {}
+})();
+</script>
+<script id="parti-st">
+(function () {
+  // a preview (prova.battagli-xxx.pages.dev, or a deployment's own address) reads its own files, not the live site's
+  var pv = location.hostname.match(/^[\w-]+\.(battagli-(?:catalogo|dipendenti|cliente))\.pages\.dev$/);
+  if (pv && window.fetch && !window.__prova) {
+    window.__prova = 1;
+    var P = 'https://' + pv[1] + '.pages.dev/', F0 = window.fetch.bind(window);
+    window.fetch = function (i, o) {
+      var u = typeof i === 'string' ? i : i && i.url;
+      if (u && u.indexOf(P) === 0) { u = location.origin + '/' + u.slice(P.length); i = typeof i === 'string' ? u : new Request(u, i); }
+      return F0(i, o);
+    };
+  }
+  var F = window.fetch && window.fetch.bind(window);
+  if (!F || window.__parti) return; window.__parti = 1;
+  var TIPI = { pdf: 'application/pdf', apk: 'application/vnd.android.package-archive', zip: 'application/zip', json: 'application/json' };
+  function hex(b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  // the parts come one after the other as ONE stream: one copy in memory, real progress for the app's
+  // own reader; each part is checked against its sha256 (parti.json "hashes") before it is passed on
+  async function riunisci(url, init, onp) {
+    var u = String(url).split('#')[0], q = u.indexOf('?'), base = q < 0 ? u : u.slice(0, q), qs = q < 0 ? '' : u.slice(q);
+    var mr = await F(base + '.parti.json' + qs, { cache: 'no-store', headers: init && init.headers });
+    if (!mr.ok) return null;
+    var m = await mr.json(), dir = base.slice(0, base.lastIndexOf('/') + 1), i = 0, got = 0;
+    var o = { cache: (init && init.cache) || 'default' };
+    if (init && init.headers) o.headers = init.headers;
+    if (init && init.credentials) o.credentials = init.credentials;
+    var corpo = new ReadableStream({
+      pull: async function (c) {
+        if (i >= m.parts.length) { if (got !== m.size) c.error(new Error('file incompleto')); else c.close(); return; }
+        var r = await F(dir + m.parts[i] + qs, o);
+        if (!r.ok) { c.error(new Error('parte ' + m.parts[i] + ': ' + r.status)); return; }
+        var b = await r.arrayBuffer();
+        if (m.hashes && crypto && crypto.subtle && hex(await crypto.subtle.digest('SHA-256', b)) !== m.hashes[i]) { c.error(new Error('file rovinato')); return; }
+        i++;
+        for (var k = 0; k < b.byteLength; k += 1048576) { var x = new Uint8Array(b, k, Math.min(1048576, b.byteLength - k)); got += x.byteLength; c.enqueue(x); if (onp) onp(got, m.size); }
+      }
+    });
+    var tipo = TIPI[(m.file.split('.').pop() || '').toLowerCase()] || 'application/octet-stream';
+    return new Response(corpo, { status: 200, headers: { 'Content-Type': tipo, 'Content-Length': String(m.size) } });
+  }
+  window.fetchParti = riunisci;
+  window.fetch = async function (input, init) {
+    var method = (init && init.method) || (input && input.method) || 'GET', url = typeof input === 'string' ? input : (input && input.url) || String(input);
+    var r, e0;
+    try { r = await F(input, init); } catch (e) { e0 = e; }
+    // a 404 from another address may come without the CORS header and fail as a network error
+    if (e0 && !(method === 'GET' && /\.pages\.dev$/.test(new URL(url, location.href).hostname))) throw e0;
+    if ((r && r.status !== 404) || method !== 'GET' || /\.parti\.json(\?|$)/.test(url)) { if (e0) throw e0; return r; }
+    try { var j = await riunisci(new URL(url, location.href).href, init); if (j) return j; } catch (e) {}
+    if (e0) throw e0; return r;
+  };
+  document.addEventListener('click', async function (ev) {
+    var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
+    if (!a || a.__parti || !/\.(apk|zip|pdf)(\?|$)/i.test(a.getAttribute('href'))) return;
+    var href = new URL(a.getAttribute('href'), location.href);
+    if (!/\.pages\.dev$/.test(href.hostname) && href.origin !== location.origin) return;
+    ev.preventDefault();
+    if (a.__busy) return;  // a second tap while it downloads does nothing
+    a.__busy = 1;
+    var old = a.innerHTML, name = href.pathname.split('/').pop(), sm = a.querySelector('small'), smOld = sm && sm.textContent;
+    function avanti(g, t) { var p = 'Scarico… ' + Math.round(g * 100 / t) + '%'; if (sm) sm.textContent = p; else a.textContent = p; }
+    try {
+      var r = await F(href.href, { method: 'HEAD', cache: 'no-store' });
+      if (r.ok) { a.__parti = 1; a.click(); a.__parti = 0; }
+      else {
+        var j = await riunisci(href.href, null, avanti);
+        if (!j) location.href = href.href;
+        else {
+          var url = URL.createObjectURL(await j.blob()), d = document.createElement('a');
+          d.href = url; d.download = name; d.__parti = 1; document.body.appendChild(d); d.click(); d.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        }
+      }
+    } catch (e) { alert('Download non riuscito, riprova. (' + e.message + ')'); }
+    if (sm) sm.textContent = smOld; else a.innerHTML = old;
+    a.__busy = 0;
+  }, true);
+})();
+</script>
+<meta charset="utf-8"><meta name="author" content="Sergio Tassoni"><meta name="copyright" content="(c) 2026 Sergio Tassoni"><meta name="generator" content="Catalogo Battagli di Sergio Tassoni"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
 /* list edit mode */
 .numedit { margin-top: 2px; }
 .numedit[aria-pressed="true"] { background: var(--ok); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); }
@@ -93,6 +261,66 @@
 .updbar .ut small { font-size: 12.5px; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .updbar .btn { width: auto; padding: 10px 16px; font-size: 15px; flex: none; }
 .updbar .updx { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--soft); color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; }
+/* temi-stagione-st */
+:root[data-theme="nat-rosso"] { --bg: #ffffff; --page: #fbf5f3; --soft: #f6e9e6; --ink: #2a1210; --ink-2: #5b3a36; --muted: #8d7470; --line: #efdcd8; --blue: #b91c1c; --blue-2: #dc2626; --blue-soft: #fdecec; --tint1: #f8d7d7; --tint2: #fdf3f2; --tint3: #e3f0e6; --blue-rgb: 185, 28, 28; --fline: #efdcd8; --dash: #efdcd8; --sline: #efdcd8; --cline: #efdcd8; }
+:root[data-theme="nat-rosso"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 26C18 14 6 16 6 16s2 6-1 9c6 1 9 6 9 6s5-6 10-5zM24 26c6-12 18-10 18-10s-2 6 1 9c-6 1-9 6-9 6s-5-6-10-5z%22/%3E%3Ccircle cx=%2220%22 cy=%2231%22 r=%223%22/%3E%3Ccircle cx=%2228%22 cy=%2231%22 r=%223%22/%3E%3Ccircle cx=%2224%22 cy=%2236%22 r=%223%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="nat-rosso"] #viewSearch .hero h1::before { content: "Buone Feste"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="nat-neve"] { --bg: #ffffff; --page: #f3f7fb; --soft: #e8f0f8; --ink: #0f1d2e; --ink-2: #3b4d63; --muted: #73849a; --line: #dfe8f2; --blue: #1e6fb8; --blue-2: #3b8ad6; --blue-soft: #e7f1fb; --tint1: #d6e7f7; --tint2: #f2f7fc; --tint3: #e1edf8; --blue-rgb: 30, 111, 184; --fline: #dfe8f2; --dash: #dfe8f2; --sline: #dfe8f2; --cline: #dfe8f2; }
+:root[data-theme="nat-neve"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 4v40M6.7 14l34.6 20M6.7 34l34.6-20M24 10l-4-4M24 10l4-4M24 38l-4 4M24 38l4 4M11.9 17l-5.5 1.4M11.9 17l-1.5-5.4M36.1 31l5.5-1.4M36.1 31l1.5 5.4M11.9 31l-1.5 5.4M11.9 31l-5.5-1.4M36.1 17l1.5-5.4M36.1 17l5.5 1.4%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="nat-neve"] #viewSearch .hero h1::before { content: "Buone Feste"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="nat-notte"] { --bg: #0f1a2e; --page: #08101f; --soft: #17243d; --ink: #f3f1ea; --ink-2: #d3cdbd; --muted: #8e95a6; --line: #1f2d48; --blue: #e3b553; --blue-2: #f0c96f; --blue-soft: #2b2a22; --tint1: #1d2c4d; --tint2: #101b33; --tint3: #2a2a24; --blue-rgb: 227, 181, 83; --glass: rgba(8, 16, 31,.92); --fline: #1f2d48; --ph: #8e95a6; --ico: #8e95a6; --tabico: #8e95a6; --dash: #1f2d48; --sline: #1f2d48; --cline: #1f2d48; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="nat-notte"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23e3b553%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 5l5.6 12.2 13.4 1.4-10 9 2.8 13.2L24 34.2 12.2 40.8 15 27.6l-10-9 13.4-1.4z%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="nat-notte"] #viewSearch .hero h1::before { content: "Buone Feste"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="nat-abete"] { --bg: #0e1f17; --page: #07140e; --soft: #16301f; --ink: #eef6f0; --ink-2: #c8dccd; --muted: #86a090; --line: #1c3526; --blue: #f87171; --blue-2: #fca5a5; --blue-soft: #3a1a1c; --tint1: #14402a; --tint2: #0b2418; --tint3: #3a1a1c; --blue-rgb: 248, 113, 113; --glass: rgba(7, 20, 14,.92); --fline: #1c3526; --ph: #86a090; --ico: #86a090; --tabico: #86a090; --dash: #1c3526; --sline: #1c3526; --cline: #1c3526; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="nat-abete"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23f87171%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 4l9 12h-5l9 11h-6l9 11H8l9-11h-6l9-11h-5zM24 38v6%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="nat-abete"] #viewSearch .hero h1::before { content: "Buone Feste"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="nat-oro"] { --bg: #fffdf8; --page: #faf6ec; --soft: #f3ecdb; --ink: #2b2313; --ink-2: #5c5138; --muted: #8f8569; --line: #ece3cc; --blue: #8a5f0c; --blue-2: #a87a0a; --blue-soft: #f8efd9; --tint1: #f1e2b8; --tint2: #fcf8ee; --tint3: #f4e9cc; --blue-rgb: 138, 95, 12; --fline: #ece3cc; --dash: #ece3cc; --sline: #ece3cc; --cline: #ece3cc; }
+:root[data-theme="nat-oro"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2224%22 cy=%2228%22 r=%2214%22/%3E%3Cpath d=%22M20 14h8v-4h-8zM24 10V6M11 26c6 3 20 3 26 0%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="nat-oro"] #viewSearch .hero h1::before { content: "Buone Feste"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="hal-zucca"] { --bg: #ffffff; --page: #fbf6f1; --soft: #f5ebe2; --ink: #24170e; --ink-2: #55402f; --muted: #8b7666; --line: #efe2d6; --blue: #c2410c; --blue-2: #ea580c; --blue-soft: #fdeee4; --tint1: #f6dcc8; --tint2: #fdf8f3; --tint3: #ede3d8; --blue-rgb: 194, 65, 12; --fline: #efe2d6; --dash: #efe2d6; --sline: #efe2d6; --cline: #efe2d6; }
+:root[data-theme="hal-zucca"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 14c-12-2-19 6-19 15s8 15 19 13c11 2 19-4 19-13s-7-17-19-15zM24 14c-5 6-5 22 0 28M24 14c5 6 5 22 0 28M24 14c0-5 2-8 6-9%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="hal-zucca"] #viewSearch .hero h1::before { content: "Halloween"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="hal-notte"] { --bg: #161210; --page: #0b0908; --soft: #221b17; --ink: #f7efe8; --ink-2: #dccbbd; --muted: #a08f80; --line: #2c241e; --blue: #f97316; --blue-2: #fb923c; --blue-soft: #3a2414; --tint1: #3d2512; --tint2: #1c140e; --tint3: #33200f; --blue-rgb: 249, 115, 22; --glass: rgba(11, 9, 8,.92); --fline: #2c241e; --ph: #a08f80; --ico: #a08f80; --tabico: #a08f80; --dash: #2c241e; --sline: #2c241e; --cline: #2c241e; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="hal-notte"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23f97316%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 17c-1.2 0-2 .8-2.4 1.8L21 16l-1 3.2C16.5 15.5 10 14 4 16c3 2.5 4 6 3 10 3-2.2 6.5-2.2 9 .5 1.3-2.2 3.5-3 5.5-2 .6 1.6 1.4 2.5 2.5 2.5s1.9-.9 2.5-2.5c2-1 4.2-.2 5.5 2 2.5-2.7 6-2.7 9-.5-1-4 0-7.5 3-10-6-2-12.5-.5-16 3.2L27 16l-.6 2.8C26 17.8 25.2 17 24 17z%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="hal-notte"] #viewSearch .hero h1::before { content: "Halloween"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="hal-strega"] { --bg: #1a1426; --page: #100b19; --soft: #241c33; --ink: #f1ecf8; --ink-2: #d0c6e0; --muted: #9a8fae; --line: #2e2440; --blue: #84cc16; --blue-2: #a3e635; --blue-soft: #22301a; --tint1: #2d1f45; --tint2: #160f22; --tint3: #22301a; --blue-rgb: 132, 204, 22; --glass: rgba(16, 11, 25,.92); --fline: #2e2440; --ph: #9a8fae; --ico: #9a8fae; --tabico: #9a8fae; --dash: #2e2440; --sline: #2e2440; --cline: #2e2440; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="hal-strega"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%2384cc16%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M4 40c10-4 30-4 40 0M12 38L22 8c2-2 6-1 6 2l-2 6 8 22M15 30c6-2 12-2 18 0%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="hal-strega"] #viewSearch .hero h1::before { content: "Halloween"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="hal-luna"] { --bg: #121826; --page: #0a0e18; --soft: #1b2335; --ink: #eef1f7; --ink-2: #c9d0de; --muted: #8a94a8; --line: #232c40; --blue: #fbbf24; --blue-2: #fcd34d; --blue-soft: #2f2a18; --tint1: #1e2a44; --tint2: #0f1522; --tint3: #2f2a18; --blue-rgb: 251, 191, 36; --glass: rgba(10, 14, 24,.92); --fline: #232c40; --ph: #8a94a8; --ico: #8a94a8; --tabico: #8a94a8; --dash: #232c40; --sline: #232c40; --cline: #232c40; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="hal-luna"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23fbbf24%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M30 6a18 18 0 1 0 12 26A15 15 0 0 1 30 6z%22/%3E%3Cpath d=%22M12 10l1 3 3 1-3 1-1 3-1-3-3-1 3-1z%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="hal-luna"] #viewSearch .hero h1::before { content: "Halloween"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="hal-fantasma"] { --bg: #151b1f; --page: #0c1013; --soft: #1d252a; --ink: #f0f5f4; --ink-2: #cbd6d4; --muted: #8c9a98; --line: #253036; --blue: #5eead4; --blue-2: #99f6e4; --blue-soft: #173330; --tint1: #173a37; --tint2: #101719; --tint3: #1d2f2d; --blue-rgb: 94, 234, 212; --glass: rgba(12, 16, 19,.92); --fline: #253036; --ph: #8c9a98; --ico: #8c9a98; --tabico: #8c9a98; --dash: #253036; --sline: #253036; --cline: #253036; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
+:root[data-theme="hal-fantasma"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%235eead4%22 stroke-opacity=%22.34%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M10 42V22a14 14 0 0 1 28 0v20l-5-4-5 4-4-4-4 4-5-4z%22/%3E%3Ccircle cx=%2219%22 cy=%2222%22 r=%222%22/%3E%3Ccircle cx=%2229%22 cy=%2222%22 r=%222%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); }
+:root[data-theme="hal-fantasma"] #viewSearch .hero h1::before { content: "Halloween"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+:root[data-theme="pas-uova"] { --bg: #ffffff; --page: #fdf4f7; --soft: #f8e7ee; --ink: #2a1520; --ink-2: #5c3d4c; --muted: #927a86; --line: #f1dfe7; --blue: #c0336b; --blue-2: #db4f86; --blue-soft: #fcebf2; --tint1: #f8d6e5; --tint2: #fdf6f9; --tint3: #dbeefa; --blue-rgb: 192, 51, 107; --fline: #f1dfe7; --dash: #f1dfe7; --sline: #f1dfe7; --cline: #f1dfe7; }
+:root[data-theme="pas-uova"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 5c-9 0-16 15-16 25a16 16 0 0 0 32 0C40 20 33 5 24 5z%22/%3E%3Cpath d=%22M9 26l5-4 5 4 5-4 5 4 5-4 5 4M9 34c5 2 25 2 30 0%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="pas-uova"] #viewSearch .hero h1::before { content: "Buona Pasqua"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="pas-prato"] { --bg: #ffffff; --page: #f3f9f1; --soft: #e6f2e2; --ink: #14240f; --ink-2: #3d5236; --muted: #74866d; --line: #dcebd6; --blue: #357a23; --blue-2: #4c9a38; --blue-soft: #e8f5e3; --tint1: #d4ecca; --tint2: #f4faf1; --tint3: #fbefc9; --blue-rgb: 53, 122, 35; --fline: #dcebd6; --dash: #dcebd6; --sline: #dcebd6; --cline: #dcebd6; }
+:root[data-theme="pas-prato"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2224%22 cy=%2218%22 r=%224%22/%3E%3Cpath d=%22M24 14c-3-8 3-10 3-10s5 3 1 10M28 18c8-3 10 3 10 3s-3 5-10 1M24 22c3 8-3 10-3 10M20 18c-8 3-10-3-10-3s3-5 10-1M24 32v12M24 38c-6-6-12-4-12-4s4 6 12 4%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="pas-prato"] #viewSearch .hero h1::before { content: "Buona Pasqua"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="pas-pulcino"] { --bg: #fffef8; --page: #fdf9e8; --soft: #f8f0cf; --ink: #2a2410; --ink-2: #5a5030; --muted: #8e8462; --line: #f0e6bd; --blue: #8f5606; --blue-2: #b07a05; --blue-soft: #fbf1cf; --tint1: #f8e7a6; --tint2: #fffbeb; --tint3: #f6ecc4; --blue-rgb: 143, 86, 6; --fline: #f0e6bd; --dash: #f0e6bd; --sline: #f0e6bd; --cline: #f0e6bd; }
+:root[data-theme="pas-pulcino"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2224%22 cy=%2230%22 r=%2212%22/%3E%3Ccircle cx=%2230%22 cy=%2214%22 r=%227%22/%3E%3Cpath d=%22M37 14l6 2-6 2M30 13h.5M18 30c3 4 8 4 10 0M20 42l-2 4M28 42l2 4%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="pas-pulcino"] #viewSearch .hero h1::before { content: "Buona Pasqua"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="pas-lilla"] { --bg: #ffffff; --page: #f7f4fc; --soft: #eee8f8; --ink: #1f1630; --ink-2: #4b3f63; --muted: #847a99; --line: #e6def3; --blue: #7448c2; --blue-2: #8f66d6; --blue-soft: #f0e9fb; --tint1: #e3d7f7; --tint2: #f9f6fd; --tint3: #e8f3e4; --blue-rgb: 116, 72, 194; --fline: #e6def3; --dash: #e6def3; --sline: #e6def3; --cline: #e6def3; }
+:root[data-theme="pas-lilla"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M14 8l5 6 5-8 5 8 5-6v12a10 10 0 0 1-20 0zM24 30v14M24 38c-5-6-11-5-11-5s3 7 11 5M24 40c5-6 11-5 11-5s-3 7-11 5%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="pas-lilla"] #viewSearch .hero h1::before { content: "Buona Pasqua"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="pas-cielo"] { --bg: #ffffff; --page: #f2f8fc; --soft: #e4f0f8; --ink: #0e2232; --ink-2: #39526a; --muted: #71889c; --line: #d9e8f3; --blue: #0a6ea5; --blue-2: #2589c2; --blue-soft: #e3f2fb; --tint1: #cfe6f5; --tint2: #f3f9fd; --tint3: #fbeed6; --blue-rgb: 10, 110, 165; --fline: #d9e8f3; --dash: #d9e8f3; --sline: #d9e8f3; --cline: #d9e8f3; }
+:root[data-theme="pas-cielo"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M14 36h22a8 8 0 0 0 0-16 11 11 0 0 0-21-2 9 9 0 0 0-1 18z%22/%3E%3Ccircle cx=%2236%22 cy=%2210%22 r=%224%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="pas-cielo"] #viewSearch .hero h1::before { content: "Buona Pasqua"; display: block; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.9); margin-bottom: 10px; }
+:root[data-theme="sta-primavera"] { --bg: #ffffff; --page: #f2faf6; --soft: #e3f3ea; --ink: #10241a; --ink-2: #3b5447; --muted: #71887c; --line: #d8ece1; --blue: #1a7a50; --blue-2: #2d9a68; --blue-soft: #e3f5ec; --tint1: #cdeedd; --tint2: #f3fbf7; --tint3: #fde8ef; --blue-rgb: 26, 122, 80; --fline: #d8ece1; --dash: #d8ece1; --sline: #d8ece1; --cline: #d8ece1; }
+:root[data-theme="sta-primavera"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M24 44V22M24 26c0-10-8-14-16-14 0 8 6 14 16 14zM24 22c0-8 6-12 14-12 0 7-5 12-14 12z%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="sta-estate"] { --bg: #ffffff; --page: #f1f8fb; --soft: #e2f1f7; --ink: #0d2430; --ink-2: #375565; --muted: #6f8a98; --line: #d6eaf2; --blue: #0e7490; --blue-2: #0891b2; --blue-soft: #dff3f8; --tint1: #c9ecf5; --tint2: #f2fafc; --tint3: #fbefd5; --blue-rgb: 14, 116, 144; --fline: #d6eaf2; --dash: #d6eaf2; --sline: #d6eaf2; --cline: #d6eaf2; }
+:root[data-theme="sta-estate"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Ccircle cx=%2224%22 cy=%2224%22 r=%228%22/%3E%3Cpath d=%22M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="sta-autunno"] { --bg: #fffcf8; --page: #faf4ec; --soft: #f3e8da; --ink: #2b1c10; --ink-2: #5d4632; --muted: #8f7a66; --line: #ecdfcf; --blue: #a14a08; --blue-2: #c66a06; --blue-soft: #fbeedd; --tint1: #f4ddc0; --tint2: #fcf7f0; --tint3: #efe0c9; --blue-rgb: 161, 74, 8; --fline: #ecdfcf; --dash: #ecdfcf; --sline: #ecdfcf; --cline: #ecdfcf; }
+:root[data-theme="sta-autunno"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M8 40C8 18 22 8 42 6c-2 20-12 34-34 34zM8 40l20-20M18 30h8M24 24v-8%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+:root[data-theme="sta-inverno"] { --bg: #ffffff; --page: #f3f5f8; --soft: #e8ecf2; --ink: #121a26; --ink-2: #3c4757; --muted: #747f8f; --line: #dfe4eb; --blue: #3b5b8c; --blue-2: #5576a8; --blue-soft: #e6ecf5; --tint1: #d5deeb; --tint2: #f4f6f9; --tint3: #e3e8f0; --blue-rgb: 59, 91, 140; --fline: #dfe4eb; --dash: #dfe4eb; --sline: #dfe4eb; --cline: #dfe4eb; }
+:root[data-theme="sta-inverno"] #viewSearch .hero { background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22 fill=%22none%22 stroke=%22%23ffffff%22 stroke-opacity=%22.30%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M3 40l14-22 7 10 6-8 15 20zM12 26l5 3 4-3M30 20l4 4 3-2%22/%3E%3C/svg%3E") no-repeat right 14px top 10px / 84px 84px, var(--hero-bg); }
+[data-theme="nat-notte"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si), [data-theme="nat-abete"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si), [data-theme="hal-notte"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si), [data-theme="hal-strega"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si), [data-theme="hal-luna"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si), [data-theme="hal-fantasma"] :is(.btn.primary, .notice-btn, .cmpbar .go, .photobtn, .chips button[aria-pressed="true"], .shutter, .pdfstatus, .cmpgrid .diff, .vela-ava, .nv-sbtn b, #listPdf, .chipbtn.nv-addl[aria-pressed="true"], .stag-bar .si) { color: #111; }
+.stag-grp { grid-column: 1 / -1; margin: 6px 4px -2px; font-size: 13px; font-weight: 800; color: var(--ink-2); letter-spacing: .2px; }
+#stagBox { margin-top: 18px; } #stagBox .block-h span { font-size: 13px; }
+.stag-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 60; width: max-content; max-width: min(460px, calc(100% - 24px)); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--bg); color: var(--ink); border-radius: 16px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(var(--shadow-rgb, 15, 23, 42), .22), 0 0 0 1px var(--line); font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+.stag-bar p { margin: 0; flex: 1 1 100%; } .stag-bar .no { margin-left: auto; } .stag-bar button { border: 0; border-radius: 10px; padding: 8px 12px; font: inherit; font-weight: 700; background: var(--soft); color: var(--ink); } .stag-bar .si { background: var(--blue); color: #fff; }
+.stag-bar[hidden] { display: none; }
 </style></head><body>
 <title>Battagli Marine Hardware</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,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">
@@ -245,12 +473,12 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
 :root[data-theme="viola"] { --bg: #241b3a; --page: #170f2a; --soft: #31254d; --ink: #f3effc; --ink-2: #d0c6ea; --muted: #9a8cbd; --line: #3a2d58; --blue: #8b5cf6; --blue-2: #a78bfa; --blue-soft: #35275a; --tint1: #3a2a64; --tint2: #2a1f47; --tint3: #33265a; --blue-rgb: 139, 92, 246; --glass: rgba(20,20,26,.92); --fline: #3a2d58; --ph: #9a8cbd; --ico: #9a8cbd; --tabico: #9a8cbd; --dash: #3a2d58; --sline: #3a2d58; --cline: #3a2d58; --mark: #f5d76e; --shadow-rgb: 0, 0, 0; color-scheme: dark; }
 :root[data-theme="azzurro"] { --bg: #ffffff; --page: #eef8fd; --soft: #e6f3fa; --ink: #0b2230; --ink-2: #35505f; --muted: #6a8493; --line: #d9eaf3; --blue: #0891b2; --blue-2: #22b8d8; --blue-soft: #e1f6fb; --tint1: #cdeefa; --tint2: #e8f8fd; --tint3: #d7f1fa; --blue-rgb: 8, 145, 178; --fline: #d9eaf3; --dash: #d9eaf3; --sline: #d9eaf3; --cline: #d9eaf3; }
 :root[data-theme="arancio"] { --bg: #ffffff; --page: #fdf6ee; --soft: #f8eddf; --ink: #26170a; --ink-2: #5a432d; --muted: #8f7a63; --line: #f0e3d3; --blue: #d9730d; --blue-2: #f09030; --blue-soft: #fff1e0; --tint1: #fde1c3; --tint2: #fff6ec; --tint3: #fdebd6; --blue-rgb: 217, 115, 13; --fline: #f0e3d3; --dash: #f0e3d3; --sline: #f0e3d3; --cline: #f0e3d3; }
-[data-theme="scuro"] .brandlogo, [data-theme="carbon"] .brandlogo, [data-theme="viola"] .brandlogo, [data-theme="oceano"] .brandlogo, [data-theme="notte"] .brandlogo, [data-theme="verdenero"] .brandlogo { mix-blend-mode: normal; background: #fff; padding: 5px 12px; border-radius: 12px; box-sizing: content-box; height: 44px; }
-[data-theme="scuro"], [data-theme="carbon"], [data-theme="viola"], [data-theme="oceano"], [data-theme="notte"], [data-theme="verdenero"] { --hero-ink: var(--ink); --hero-sub: var(--muted); }
-[data-theme="scuro"] .hero, [data-theme="carbon"] .hero, [data-theme="viola"] .hero, [data-theme="oceano"] .hero, [data-theme="notte"] .hero, [data-theme="verdenero"] .hero { background: radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); border-bottom-color: var(--line); }
-[data-theme="scuro"] .photobtn, [data-theme="carbon"] .photobtn, [data-theme="viola"] .photobtn, [data-theme="oceano"] .photobtn, [data-theme="notte"] .photobtn, [data-theme="verdenero"] .photobtn { background: var(--blue); color: #fff; }
+[data-theme="scuro"] .brandlogo, [data-theme="carbon"] .brandlogo, [data-theme="viola"] .brandlogo, [data-theme="oceano"] .brandlogo, [data-theme="notte"] .brandlogo, [data-theme="nat-notte"] .brandlogo, [data-theme="nat-abete"] .brandlogo, [data-theme="hal-notte"] .brandlogo, [data-theme="hal-strega"] .brandlogo, [data-theme="hal-luna"] .brandlogo, [data-theme="hal-fantasma"] .brandlogo, [data-theme="verdenero"] .brandlogo { mix-blend-mode: normal; background: #fff; padding: 5px 12px; border-radius: 12px; box-sizing: content-box; height: 44px; }
+[data-theme="scuro"], [data-theme="carbon"], [data-theme="viola"], [data-theme="oceano"], [data-theme="notte"], [data-theme="nat-notte"], [data-theme="nat-abete"], [data-theme="hal-notte"], [data-theme="hal-strega"], [data-theme="hal-luna"], [data-theme="hal-fantasma"], [data-theme="verdenero"] { --hero-ink: var(--ink); --hero-sub: var(--muted); }
+[data-theme="scuro"] .hero, [data-theme="carbon"] .hero, [data-theme="viola"] .hero, [data-theme="oceano"] .hero, [data-theme="notte"] .hero, [data-theme="nat-notte"] .hero, [data-theme="nat-abete"] .hero, [data-theme="hal-notte"] .hero, [data-theme="hal-strega"] .hero, [data-theme="hal-luna"] .hero, [data-theme="hal-fantasma"] .hero, [data-theme="verdenero"] .hero { background: radial-gradient(90% 70% at 100% 0%, var(--tint1) 0%, transparent 70%), radial-gradient(70% 60% at 0% 10%, var(--tint2) 0%, transparent 70%), var(--bg); border-bottom-color: var(--line); }
+[data-theme="scuro"] .photobtn, [data-theme="carbon"] .photobtn, [data-theme="viola"] .photobtn, [data-theme="oceano"] .photobtn, [data-theme="notte"] .photobtn, [data-theme="nat-notte"] .photobtn, [data-theme="nat-abete"] .photobtn, [data-theme="hal-notte"] .photobtn, [data-theme="hal-strega"] .photobtn, [data-theme="hal-luna"] .photobtn, [data-theme="hal-fantasma"] .photobtn, [data-theme="verdenero"] .photobtn { background: var(--blue); color: #fff; }
 [data-theme="scuro"] .hint code, [data-theme="carbon"] .hint code, [data-theme="viola"] .hint code, [data-theme="oceano"] .hint code, [data-theme="notte"] .hint code { color: var(--ink); }
-[data-theme="scuro"] .tabbar, [data-theme="carbon"] .tabbar, [data-theme="viola"] .tabbar, [data-theme="oceano"] .tabbar, [data-theme="notte"] .tabbar, [data-theme="verdenero"] .tabbar { border-top-color: var(--line); }
+[data-theme="scuro"] .tabbar, [data-theme="carbon"] .tabbar, [data-theme="viola"] .tabbar, [data-theme="oceano"] .tabbar, [data-theme="notte"] .tabbar, [data-theme="nat-notte"] .tabbar, [data-theme="nat-abete"] .tabbar, [data-theme="hal-notte"] .tabbar, [data-theme="hal-strega"] .tabbar, [data-theme="hal-luna"] .tabbar, [data-theme="hal-fantasma"] .tabbar, [data-theme="verdenero"] .tabbar { border-top-color: var(--line); }
 
 
 /* Photo search */
@@ -508,7 +736,7 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
     <form class="search-sticky" id="searchForm" autocomplete="off">
       <div class="field">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="q" name="q" type="text" inputmode="decimal" enterkeyhint="search" placeholder="Codice, es. 10.0320.02" spellcheck="false" autocapitalize="off" aria-label="Cerca per codice">
+        <input id="q" name="q" type="text" inputmode="decimal" enterkeyhint="search" placeholder="Codice, es. 10.0320.01" spellcheck="false" autocapitalize="off" aria-label="Cerca per codice">
         <button class="iconbtn histb" id="histBtn" type="button" aria-label="Ultime ricerche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
         <button class="iconbtn" id="clearQ" type="button" aria-label="Cancella codice" hidden>
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".3"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
@@ -616,7 +844,7 @@ main > *, .art > *, .photos > *, .row > *, .search-sticky > * { min-width: 0; ma
 <main class="wrap">
   <section id="shareSec"><div class="block-h"><h2>Condividi l'app</h2></div><div class="shareops"><button class="btn primary" type="button" id="shareAndroid"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.87 3.22A11.4 11.4 0 0 0 12 8.15c-1.77 0-3.43.39-4.91 1L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>Android</button><button class="btn primary" type="button" id="shareIos"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.6 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.3-3.52zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.07 1.96-.49 2.56-1.21z"/></svg>iPhone</button><button class="btn primary" type="button" id="sharePc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.6"/><path d="M8 20.5h8M12 16.5v4"/></svg>PC</button></div><p class="note" style="margin-top:8px">Manda il link con WhatsApp o email. Il catalogo PDF va mandato a parte.</p><div id="shareLinks" hidden></div></section>
   <section><div class="block-h"><h2>Catalogo PDF</h2></div><button class="btn primary" type="button" data-goto="catalog" style="display:flex;align-items:center;justify-content:center;gap:10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:22px;height:22px;flex:none"><path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5"/><text x="12" y="17.6" text-anchor="middle" font-size="6.2" font-weight="800" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">PDF</text></svg>Aggiorna catalogo</button><button class="btn" type="button" id="catBack" hidden style="margin-top:10px;background:var(--soft);color:var(--ink)">Torna al catalogo precedente</button><p class="note" style="margin-top:8px">Quando esce un nuovo catalogo, caricalo qui: l'app rilegge tutto da sola (codici, foto, pagine) e sostituisce il vecchio.</p></section>
-  <section><div class="block-h"><h2>Tema colore</h2></div><div class="themes"><button class="theme" type="button" data-theme="chiaro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0a5cc2 45% 100%)"></i><span>Chiaro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="scuro" aria-pressed="false"><i style="background:linear-gradient(135deg,#1b2433 0 45%,#3b82f6 45% 100%)"></i><span>Scuro<small>Scuro</small></span></button><button class="theme" type="button" data-theme="carbon" aria-pressed="false"><i style="background:linear-gradient(135deg,#1d1d20 0 45%,#ff5a36 45% 100%)"></i><span>Carbon<small>Scuro</small></span></button><button class="theme" type="button" data-theme="viola" aria-pressed="false"><i style="background:linear-gradient(135deg,#241b3a 0 45%,#8b5cf6 45% 100%)"></i><span>Viola<small>Scuro</small></span></button><button class="theme" type="button" data-theme="azzurro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0891b2 45% 100%)"></i><span>Azzurro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="arancio" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#d9730d 45% 100%)"></i><span>Tramonto<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="verde" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#15803d 45% 100%)"></i><span>Verde<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="rosso" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#c62833 45% 100%)"></i><span>Rosso<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="oceano" aria-pressed="false"><i style="background:linear-gradient(135deg,#10282b 0 45%,#14b8a6 45% 100%)"></i><span>Oceano<small>Scuro</small></span></button><button class="theme" type="button" data-theme="notte" aria-pressed="false"><i style="background:linear-gradient(135deg,#000000 0 45%,#0ea5e9 45% 100%)"></i><span>Notte<small>Nero totale</small></span></button><button class="theme" type="button" data-theme="verdenero" aria-pressed="false"><i style="background:linear-gradient(135deg,#050806 0 45%,#22c55e 45% 100%)"></i><span>Verde e nero<small>Scuro</small></span></button><button class="theme" type="button" data-theme="rosa" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#db2777 45% 100%)"></i><span>Rosa<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="lavanda" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#7c3aed 45% 100%)"></i><span>Lavanda<small>Chiaro</small></span></button></div></section>
+  <section><div class="block-h"><h2>Tema colore</h2></div><div class="themes"><button class="theme" type="button" data-theme="chiaro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0a5cc2 45% 100%)"></i><span>Chiaro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="scuro" aria-pressed="false"><i style="background:linear-gradient(135deg,#1b2433 0 45%,#3b82f6 45% 100%)"></i><span>Scuro<small>Scuro</small></span></button><button class="theme" type="button" data-theme="carbon" aria-pressed="false"><i style="background:linear-gradient(135deg,#1d1d20 0 45%,#ff5a36 45% 100%)"></i><span>Carbon<small>Scuro</small></span></button><button class="theme" type="button" data-theme="viola" aria-pressed="false"><i style="background:linear-gradient(135deg,#241b3a 0 45%,#8b5cf6 45% 100%)"></i><span>Viola<small>Scuro</small></span></button><button class="theme" type="button" data-theme="azzurro" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#0891b2 45% 100%)"></i><span>Azzurro<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="arancio" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#d9730d 45% 100%)"></i><span>Tramonto<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="verde" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#15803d 45% 100%)"></i><span>Verde<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="rosso" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#c62833 45% 100%)"></i><span>Rosso<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="oceano" aria-pressed="false"><i style="background:linear-gradient(135deg,#10282b 0 45%,#14b8a6 45% 100%)"></i><span>Oceano<small>Scuro</small></span></button><button class="theme" type="button" data-theme="notte" aria-pressed="false"><i style="background:linear-gradient(135deg,#000000 0 45%,#0ea5e9 45% 100%)"></i><span>Notte<small>Nero totale</small></span></button><button class="theme" type="button" data-theme="verdenero" aria-pressed="false"><i style="background:linear-gradient(135deg,#050806 0 45%,#22c55e 45% 100%)"></i><span>Verde e nero<small>Scuro</small></span></button><button class="theme" type="button" data-theme="rosa" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#db2777 45% 100%)"></i><span>Rosa<small>Chiaro</small></span></button><button class="theme" type="button" data-theme="lavanda" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 0 45%,#7c3aed 45% 100%)"></i><span>Lavanda<small>Chiaro</small></span></button></div><div id="stagBox" hidden><div class="block-h"><h2>Temi di stagione</h2><span id="stagInfo"></span></div><div class="themes" id="stagThemes"><button class="theme" type="button" id="stagAuto" aria-pressed="false"><i style="background:conic-gradient(#3f8f2a 0 25%,#0e7490 0 50%,#b45309 0 75%,#3b5b8c 0)"></i><span>Automatico<small>Cambia con le stagioni</small></span></button><p class="stag-grp" data-stag="natale" hidden>Natale · dal 10 dicembre al 9 gennaio</p><button class="theme" type="button" data-theme="nat-rosso" data-stag="natale" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#fbf5f3 0 45%,#b91c1c 45% 100%)"></i><span>Natale<small>Rosso e verde</small></span></button><button class="theme" type="button" data-theme="nat-neve" data-stag="natale" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f3f7fb 0 45%,#1e6fb8 45% 100%)"></i><span>Neve<small>Bianco e ghiaccio</small></span></button><button class="theme" type="button" data-theme="nat-notte" data-stag="natale" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#08101f 0 45%,#e3b553 45% 100%)"></i><span>Notte di Natale<small>Blu e oro</small></span></button><button class="theme" type="button" data-theme="nat-abete" data-stag="natale" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#07140e 0 45%,#f87171 45% 100%)"></i><span>Abete<small>Verde e rosso</small></span></button><button class="theme" type="button" data-theme="nat-oro" data-stag="natale" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#faf6ec 0 45%,#8a5f0c 45% 100%)"></i><span>Oro<small>Crema e oro</small></span></button><p class="stag-grp" data-stag="pasqua" hidden>Pasqua · 15 giorni prima e dopo Pasqua</p><button class="theme" type="button" data-theme="pas-uova" data-stag="pasqua" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#fdf4f7 0 45%,#c0336b 45% 100%)"></i><span>Uova dipinte<small>Rosa e azzurro</small></span></button><button class="theme" type="button" data-theme="pas-prato" data-stag="pasqua" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f3f9f1 0 45%,#357a23 45% 100%)"></i><span>Prato<small>Verde chiaro</small></span></button><button class="theme" type="button" data-theme="pas-pulcino" data-stag="pasqua" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#fdf9e8 0 45%,#8f5606 45% 100%)"></i><span>Pulcino<small>Giallo</small></span></button><button class="theme" type="button" data-theme="pas-lilla" data-stag="pasqua" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f7f4fc 0 45%,#7448c2 45% 100%)"></i><span>Lillà<small>Lilla e verde</small></span></button><button class="theme" type="button" data-theme="pas-cielo" data-stag="pasqua" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f2f8fc 0 45%,#0a6ea5 45% 100%)"></i><span>Cielo<small>Azzurro chiaro</small></span></button><p class="stag-grp" data-stag="halloween" hidden>Halloween · dal 16 ottobre al 15 novembre</p><button class="theme" type="button" data-theme="hal-zucca" data-stag="halloween" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#fbf6f1 0 45%,#c2410c 45% 100%)"></i><span>Zucca<small>Bianco e arancio</small></span></button><button class="theme" type="button" data-theme="hal-notte" data-stag="halloween" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#0b0908 0 45%,#f97316 45% 100%)"></i><span>Notte di Halloween<small>Nero e arancio</small></span></button><button class="theme" type="button" data-theme="hal-strega" data-stag="halloween" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#100b19 0 45%,#84cc16 45% 100%)"></i><span>Strega<small>Viola e verde</small></span></button><button class="theme" type="button" data-theme="hal-luna" data-stag="halloween" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#0a0e18 0 45%,#fbbf24 45% 100%)"></i><span>Luna piena<small>Notte e giallo</small></span></button><button class="theme" type="button" data-theme="hal-fantasma" data-stag="halloween" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#0c1013 0 45%,#5eead4 45% 100%)"></i><span>Fantasmi<small>Grigio e menta</small></span></button><p class="stag-grp" data-stag="primavera" hidden>Primavera · dal 21 marzo al 20 giugno</p><button class="theme" type="button" data-theme="sta-primavera" data-stag="primavera" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f2faf6 0 45%,#1a7a50 45% 100%)"></i><span>Primavera<small>Verde fresco</small></span></button><p class="stag-grp" data-stag="estate" hidden>Estate · dal 21 giugno al 22 settembre</p><button class="theme" type="button" data-theme="sta-estate" data-stag="estate" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f1f8fb 0 45%,#0e7490 45% 100%)"></i><span>Estate<small>Mare e sabbia</small></span></button><p class="stag-grp" data-stag="autunno" hidden>Autunno · dal 23 settembre al 20 dicembre</p><button class="theme" type="button" data-theme="sta-autunno" data-stag="autunno" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#faf4ec 0 45%,#a14a08 45% 100%)"></i><span>Autunno<small>Foglie e terra</small></span></button><p class="stag-grp" data-stag="inverno" hidden>Inverno · dal 21 dicembre al 20 marzo</p><button class="theme" type="button" data-theme="sta-inverno" data-stag="inverno" aria-pressed="false" hidden><i style="background:linear-gradient(135deg,#f3f5f8 0 45%,#3b5b8c 45% 100%)"></i><span>Inverno<small>Grigio e blu</small></span></button></div></div></section>
   <section hidden><div class="block-h"><h2>Ricerca da foto</h2></div><div class="credit" style="text-align:left"><p class="visnote" id="visSetting" style="margin:0">Non attiva</p><div class="visbar" style="margin-top:10px"><i id="visSetBar"></i></div></div></section>
   <section id="updSec"><div class="block-h"><h2>Aggiornamenti</h2><span id="appVer"></span></div><button class="btn primary" type="button" id="updCheck">Controlla aggiornamenti</button><p class="note" id="updNote" style="margin-top:8px">Si aggiorna l'app (funzioni e ricerca). Quando esce un catalogo nuovo l'app lo propone da sola; si può anche caricare un PDF con "Aggiorna catalogo". Quando c'è una versione nuova compare in alto il pulsante "Aggiorna". Catalogo, preferiti e impostazioni restano salvati.</p></section>
   <section><div class="block-h"><h2>Cronologia</h2></div><button class="btn ghost" type="button" id="clearHist2" style="background:var(--soft);color:var(--ink)">Cancella cronologia delle ricerche</button></section>
@@ -925,7 +1153,7 @@ function labelFor(hd, it) {
   return bd < 60 ? best : '';
 }
 
-// Prices look like "12,50 A" (the letter is the price list). Make sure the price is labelled "prezzo":
+// Prices look like "N,NN A" (the letter is the price list). Make sure the price is labelled "prezzo":
 // split it off a cell it is glued to, and label it when the header was missing or wrong.
 const PRICE_RE = /^\d[\d.]*,\d{2} [ABCHNTUXYZ]$/;
 function fixPrice(f) {
@@ -1015,7 +1243,7 @@ let currentRow = null;
 // ---------- local storage (IndexedDB) ----------
 let idbP = null;
 // (by address, not APP_ED: the databases are opened while the script is still running, before APP_ED exists)
-const DBN = n => /github\.io$/.test(location.hostname) && /^\/battagli-cliente\//.test(location.pathname) ? n + '-clienti' : n;
+const DBN = n => n + '-clienti';  /*clientipc-st: own databases on every address, also on a PC with the employee app*/
 function idb() {
   if (!idbP) idbP = new Promise((res, rej) => {
     try {
@@ -1040,11 +1268,11 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 let PRE = null;
 let PRE_SIG = '';
 const preSig = () => PRE_SIG || (PRE_SIG = (() => { const t = [normText, words, fmtCode, fold, buildVocab].map(f => String(f)).join('|') + [...STOP].join(','); let x = 0x811c9dc5; for (let k = 0; k < t.length; k++) { x ^= t.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16); })());
-const preKey = idx => [preSig() + '|clean1', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
+const preKey = idx => [preSig() + '|clean2', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
 let preT = 0;
 function savePre(idx) { clearTimeout(preT); const key = preKey(idx), d = { key, HAY, HAYT, HAYS, V: [...VOCAB] }; preT = setTimeout(() => { if (INDEX === idx) idbSet('pre', d); }, 4000); }
 function cleanIdx(idx) {
-  if (!idx || idx.example || !idx.rows || idx.cleanV === 1) return;
+  if (!idx || idx.example || !idx.rows || idx.cleanV === 2) return;
   let cli = false; try { cli = APP_ED === 'cliente'; } catch (e) {}
   for (const r of idx.rows) {
     if (!r || !r.f) continue;
@@ -1056,7 +1284,9 @@ function cleanIdx(idx) {
       return m ? [k, m[1]] : [k, v];
     }).filter(([k, v]) => !(/prezz/i.test(k) && v === ''));
   }
-  idx.cleanV = 1;
+  // clean2: prices in a field with no name, copies without prices only
+  for (const r of idx.rows) { if (r && r.f) r.f = r.f.filter(([k, v]) => k || !/^\s*(?:€\s*)?\d[\d.]*,\d{2}\s+[A-KM-UX-Z]\s*$/.test(String(v))); }
+  idx.cleanV = 2;
 }
 function setIndex(idx, meta) {
   cleanIdx(idx);
@@ -2024,8 +2254,11 @@ function kept(key, make) {
   THUMB.set(key, p);
   return p;
 }
-function thumbFor(row, maxW) { return kept(row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => thumbFor0(row, maxW)); }
-function photosFor(row, maxW) { return kept('all|' + row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => photosFor0(row, maxW)); }
+const manX = row => { try { return INDEX.x && INDEX.x[row.c] || null; } catch (e) { return null; } };
+function thumbFor(row, maxW) { const x = manX(row); if (x && Array.isArray(x.foto) && x.foto.length) return Promise.resolve(x.foto[0]); if (x && x.nofoto) return Promise.resolve(null); return thumbForPdf(row, maxW); }
+function thumbForPdf(row, maxW) { return kept(row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => thumbFor0(row, maxW)); }
+function photosFor(row, maxW) { const x = manX(row); if (x && Array.isArray(x.foto) && x.foto.length) return Promise.resolve(x.foto.slice()); if (x && x.nofoto) return Promise.resolve([]); return photosForPdf(row, maxW); }
+function photosForPdf(row, maxW) { return kept('all|' + row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at, () => photosFor0(row, maxW)); }
 function warmPdf() { setTimeout(() => (window.requestIdleCallback || (f => f()))(async () => { try { if (!INDEX.example && (await idbGet('pdfKey')) === INDEX.at) getPdfForView(); } catch (e) {} }), 2500); }
 function thumbFor0(row, maxW) {
   const key = row.c + '|' + row.p + '|' + maxW + '|' + INDEX.at;
@@ -2285,15 +2518,98 @@ document.addEventListener('click', e => {
 $('back').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
 
-const THEME_COL = { chiaro: '#0a5cc2', scuro: '#3b82f6', carbon: '#ff5a36', viola: '#8b5cf6', azzurro: '#0891b2', arancio: '#d9730d', verde: '#15803d', rosso: '#c62833', oceano: '#14b8a6', notte: '#0ea5e9', verdenero: '#22c55e', rosa: '#db2777', lavanda: '#7c3aed' };
+const THEME_COL = { chiaro: '#0a5cc2', scuro: '#3b82f6', carbon: '#ff5a36', viola: '#8b5cf6', azzurro: '#0891b2', arancio: '#d9730d', verde: '#15803d', rosso: '#c62833', oceano: '#14b8a6', notte: '#0ea5e9', 'nat-rosso': '#b91c1c', 'nat-neve': '#1e6fb8', 'nat-notte': '#e3b553', 'nat-abete': '#f87171', 'nat-oro': '#8a5f0c', 'hal-zucca': '#c2410c', 'hal-notte': '#f97316', 'hal-strega': '#84cc16', 'hal-luna': '#fbbf24', 'hal-fantasma': '#5eead4', 'pas-uova': '#c0336b', 'pas-prato': '#357a23', 'pas-pulcino': '#8f5606', 'pas-lilla': '#7448c2', 'pas-cielo': '#0a6ea5', 'sta-primavera': '#1a7a50', 'sta-estate': '#0e7490', 'sta-autunno': '#a14a08', 'sta-inverno': '#3b5b8c', verdenero: '#22c55e', rosa: '#db2777', lavanda: '#7c3aed' };
 function applyTheme(t) {
   if (t === 'blu') t = 'chiaro'; if (t === 'grafite') t = 'carbon';
   if (!THEME_COL[t]) t = 'chiaro';
   if (t === 'chiaro') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
   document.querySelectorAll('.theme').forEach(b => b.setAttribute('aria-pressed', b.dataset.theme === t));
 }
-applyTheme(lsGet('theme', 'chiaro'));
-document.addEventListener('click', e => { const t = e.target.closest('.theme'); if (t) { lsSet('theme', t.dataset.theme); applyTheme(t.dataset.theme); } });
+/* temi-stagione-st: temi di Natale, Halloween, Pasqua e delle stagioni, visibili solo nel loro periodo */
+const STAG = {"nat-rosso": "natale", "nat-neve": "natale", "nat-notte": "natale", "nat-abete": "natale", "nat-oro": "natale", "hal-zucca": "halloween", "hal-notte": "halloween", "hal-strega": "halloween", "hal-luna": "halloween", "hal-fantasma": "halloween", "pas-uova": "pasqua", "pas-prato": "pasqua", "pas-pulcino": "pasqua", "pas-lilla": "pasqua", "pas-cielo": "pasqua", "sta-primavera": "primavera", "sta-estate": "estate", "sta-autunno": "autunno", "sta-inverno": "inverno"};
+const STAG_NOME = {"natale": "Natale", "pasqua": "Pasqua", "halloween": "Halloween", "primavera": "Primavera", "estate": "Estate", "autunno": "Autunno", "inverno": "Inverno"};
+function stagOggi() {
+  const p = window.__dataProva; if (p) { const d = new Date(p + 'T12:00:00'); if (!isNaN(d)) return d; }
+  return new Date();
+}
+function stagPasqua(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mese = Math.floor((h + l - 7 * m + 114) / 31), giorno = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mese - 1, giorno);
+}
+function stagAttivi(t) {
+  const y = t.getFullYear(), oggi = new Date(y, t.getMonth(), t.getDate()), md = (t.getMonth() + 1) * 100 + t.getDate(), s = [];
+  // ogni festa: da 15 giorni prima a 15 giorni dopo (anche a cavallo dell'anno)
+  const festa = f => [y - 1, y, y + 1].some(a => { const d = f(a); return oggi >= new Date(a, d.getMonth(), d.getDate() - 15) && oggi <= new Date(a, d.getMonth(), d.getDate() + 15); });
+  if (festa(a => new Date(a, 11, 25))) s.push('natale');
+  if (festa(stagPasqua)) s.push('pasqua');
+  if (festa(a => new Date(a, 9, 31))) s.push('halloween');
+  s.push(md >= 321 && md <= 620 ? 'primavera' : md >= 621 && md <= 922 ? 'estate' : md >= 923 && md <= 1220 ? 'autunno' : 'inverno');
+  return s;
+}
+function stagAuto() {
+  let a = lsGet('temaAuto', null);
+  if (a !== true && a !== false) { let mai = true; try { mai = localStorage.getItem('theme') === null; } catch {} a = mai; lsSet('temaAuto', a); }
+  return a;
+}
+function stagPrimo(g) { return Object.keys(STAG).find(k => STAG[k] === g); }
+function stagAvviso(testo, si, no) {
+  let b = document.getElementById('stagBar');
+  if (!b) { b = document.createElement('div'); b.id = 'stagBar'; b.className = 'stag-bar'; b.setAttribute('role', 'status'); document.body.appendChild(b); }
+  b.innerHTML = '<p></p><button type="button" class="no"></button><button type="button" class="si"></button>';
+  b.querySelector('p').textContent = testo;
+  b.querySelector('.no').textContent = no[0]; b.querySelector('.si').textContent = si[0];
+  b.querySelector('.no').onclick = () => { b.hidden = true; no[1] && no[1](); };
+  b.querySelector('.si').onclick = () => { b.hidden = true; si[1] && si[1](); };
+  b.hidden = false;
+}
+function stagVediTemi() { showView('settings'); setTimeout(() => { const x = document.getElementById('stagBox'); if (x) x.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60); }
+function stagApplica() {
+  const att = stagAttivi(stagOggi()), auto = stagAuto();
+  document.querySelectorAll('[data-stag]').forEach(el => { el.hidden = !att.includes(el.dataset.stag); });
+  const box = document.getElementById('stagBox'); if (box) box.hidden = false;
+  const info = document.getElementById('stagInfo'); if (info) info.textContent = att.map(g => STAG_NOME[g]).join(' · ');
+  let t;
+  if (auto) t = stagPrimo(att[0]);
+  else {
+    t = lsGet('theme', 'chiaro');
+    if (STAG[t] && !att.includes(STAG[t])) {
+      const g = STAG[t]; t = lsGet('themePrima', 'chiaro'); if (STAG[t]) t = 'chiaro';
+      lsSet('theme', t); toast('Il tema ' + STAG_NOME[g] + ' è finito: torni al tuo tema.');
+    }
+  }
+  applyTheme(t);
+  const ab = document.getElementById('stagAuto'); if (ab) ab.setAttribute('aria-pressed', auto);
+  if (auto) document.querySelectorAll('.theme[data-theme]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  clearTimeout(stagT); stagT = setTimeout(() => stagNovita(att, auto), 1500);
+}
+let stagT = 0;
+function stagNovita(att, auto) {
+  // avviso una volta per periodo e per anno, mai sopra un'altra finestra (es. l'avviso iniziale)
+  if (document.querySelector('#avvDlg:not([hidden])')) { stagT = setTimeout(() => stagNovita(att, auto), 3000); return; }
+  const t = stagOggi(), anno = g => t.getFullYear() - ((g === 'natale' || g === 'inverno') && t.getMonth() < 6 ? 1 : 0);
+  const visti = lsGet('stagVisti', {}) || {}, nuovi = att.filter(g => visti[g] !== anno(g));
+  if (!nuovi.length) return;
+  nuovi.forEach(g => { visti[g] = anno(g); }); lsSet('stagVisti', visti);
+  if (auto && !nuovi.includes(att[0])) return; // con il tema automatico si avvisa solo del tema che si vede
+  const g = auto ? att[0] : nuovi[0], festa = !['primavera', 'estate', 'autunno', 'inverno'].includes(g);
+  if (auto) stagAvviso((festa ? 'È arrivato il tema di ' : 'È arrivato il tema ') + STAG_NOME[g] + '. Puoi cambiarlo quando vuoi in Impostazioni.',
+    ['Va bene'], ['Tema normale', () => { lsSet('temaAuto', false); lsSet('theme', 'chiaro'); stagApplica(); }]);
+  else stagAvviso((festa ? 'Sono arrivati i temi di ' + STAG_NOME[g] + '. Li trovi' : 'È arrivato il tema ' + STAG_NOME[g] + '. Lo trovi') + ' in Impostazioni, il tuo tema resta com’è.',
+    ['Vedi', stagVediTemi], ['No, grazie']);
+}
+stagApplica();
+document.addEventListener('click', e => {
+  if (e.target.closest('#stagAuto')) { lsSet('temaAuto', true); stagApplica(); return; }
+  const b = e.target.closest('.theme[data-theme]'); if (!b) return;
+  const t = b.dataset.theme, prima = stagAuto() ? 'chiaro' : lsGet('theme', 'chiaro');
+  if (STAG[t] && !STAG[prima]) lsSet('themePrima', prima);
+  lsSet('temaAuto', false); lsSet('theme', t); stagApplica();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) stagApplica(); });
+setInterval(stagApplica, 30 * 60 * 1000);
+
 function showView(v) {
   const views = { search: 'viewSearch', catalog: 'viewCatalog', numbers: 'viewNumbers', settings: 'viewSettings' };
   for (const [name, id] of Object.entries(views)) $(id).hidden = v !== name;
@@ -2361,7 +2677,7 @@ async function upgradeIndex() {
 // ---------- boot ----------
 
 // ---------- first start without a catalogue: get it from this edition's site ----------
-const SITE_CAT = 'https://serginolimoncino.github.io/battagli-cliente/CATALOG/'.replace('CATALOG', 'catalog');
+const SITE_CAT = 'https://battagli-cliente.pages.dev/CATALOG/'.replace('CATALOG', 'catalog');
 async function siteCatalog() {
   const cur = await idbGet('index');
   let loc = null;
@@ -2383,6 +2699,7 @@ async function siteCatalog() {
   overlay(true, T, 'Serve internet per qualche minuto…', 0.02);
   const idx = await (await fetch(SITE_CAT + 'index.json', { cache: 'no-store' })).json();
   if (!idx || !idx.rows || !idx.rows.length) throw new Error('index');
+  if (APP_ED === 'cliente' && idx.ed !== 'cliente') throw new Error('index');  /*clientipc-st*/
   const pr = await fetch(SITE_CAT + 'catalogo.pdf', { cache: 'no-store' }); if (!pr.ok) throw new Error('pdf');
   const total = +pr.headers.get('content-length') || info.size || 0; let got = 0; const parts = [];
   if (pr.body && pr.body.getReader) {
@@ -2441,6 +2758,16 @@ async function siteCatalog() {
       if (cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
     } else if (APP_ED !== 'cliente' && cliCat(await idbGet('indexPrev'))) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
   } catch (e) {}
+  try { if (APP_ED === 'cliente') {  /*clientipc-st: the customer copy never keeps a catalogue with prices*/
+    const priced = x => !!(x && x.rows && !x.example && x.ed !== 'cliente' && x.rows.some(r => r && r.f && r.f.some(([k, v]) => /prezz/i.test(k) && /\d,\d{2}/.test(String(v)))));
+    const c = await idbGet('index'), p = await idbGet('indexPrev'), bc = priced(c), bp = priced(p);
+    if (bc) {
+      for (const k of ['index', 'pdf', 'pdfKey', 'meta', 'pre']) await idbDel(k);
+      const vm = await idbGet('vismeta'); if (vm) { for (let i = 0; i < (vm.chunks || 0); i++) await idbDel('vis:' + i); await idbDel('vismeta'); }
+    }
+    if (bp) for (const k of ['indexPrev', 'pdfPrev', 'pdfKeyPrev']) await idbDel(k);
+    if (bc || bp) { try { const d = await fotoDb(); await new Promise(res => { const t = d.transaction('f', 'readwrite'); t.objectStore('f').clear(); t.oncomplete = res; t.onerror = res; t.onabort = res; }); fotoMeta = null; } catch (e) {} }
+  } } catch (e) {}
   let hasCat = false; try { const c = await idbGet('index'); hasCat = !!(c && c.rows && c.rows.length && !c.example); } catch (e) {}
   const catFail = () => { overlay(false); toast('Download del catalogo non riuscito: riprovo alla prossima apertura'); };
   if (!hasCat) { try { if (await siteCatalog()) { location.reload(); return; } } catch (e) { catFail(); } }
@@ -2645,8 +2972,8 @@ $('favQ').addEventListener('input', favPageRender);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('sheet').hidden && !$('favSheet').hidden) favPageClose(); });
 
 // ---------- share the app: Android / iPhone / PC Windows, always this edition ----------
-const SHARE_URL = { android: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-Marine-Hardware.apk', ios: 'https://serginolimoncino.github.io/battagli-cliente/', pc: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-PC-Windows.zip' };
-const SHARE_TXT = { android: 'Catalogo Battagli per Android: scarica e installa l\'app da questo link.', ios: 'Catalogo Battagli per iPhone: apri il link con Safari, poi Condividi > "Aggiungi alla schermata Home".', pc: 'Catalogo Battagli per PC Windows: scarica lo zip, estrailo e apri "Battagli Catalogo".' };
+const SHARE_URL = { android: 'https://battagli-cliente.pages.dev/scarica/', ios: 'https://battagli-cliente.pages.dev/', pc: 'https://battagli-cliente.pages.dev/' };
+const SHARE_TXT = { android: 'Catalogo Battagli per Android: scarica e installa l\'app da questo link.', ios: 'Catalogo Battagli per iPhone: apri il link con Safari, poi Condividi > "Aggiungi alla schermata Home".', pc: 'Catalogo Battagli per computer: apri il link con Chrome o Edge, niente da installare.' }; /*pclink-st*/
 async function shareTo(k) {
   const url = SHARE_URL[k], text = SHARE_TXT[k];
   // inside the Android app: the phone's own share sheet (WhatsApp, mail…) with the link
@@ -2672,9 +2999,9 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 34, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 42, APP_ED = 'cliente', APP_PF = 'pc', UPD_BASE = 'https://battagli-cliente.pages.dev/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
-const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
+const vTxt = n => '2.1 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
 $('appVer').textContent = 'versione ' + vTxt(APP_V);
 try { localStorage.removeItem('appcodeTry'); } catch {}
@@ -2698,6 +3025,7 @@ async function updApply() {
       if (!r.ok) throw new Error('http');
       const html = await r.text();
       if (html.indexOf("APP_ED = '" + APP_ED + "'") < 0 || html.indexOf("APP_PF = '" + APP_PF + "'") < 0 || html.indexOf('const APP_V = ' + UPD.v + ',') < 0) throw new Error('bad');
+      { let o0 = null; try { o0 = JSON.parse(localStorage.getItem('appcode') || 'null'); } catch (e) {} if (o0 && o0.ed && o0.ed !== APP_ED && o0.v >= 42) { alert("Su questo PC c'è anche l'altra copia del programma e non posso aggiornarle tutte e due. Usa questa copia dal browser: " + (APP_ED === 'cliente' ? 'https://battagli-cliente.pages.dev/' : 'https://battagli-catalogo.pages.dev/')); throw new Error('altra'); } }
       localStorage.setItem('appcode', JSON.stringify({ v: UPD.v, ed: APP_ED, pf: APP_PF, html }));
       localStorage.removeItem('appcodeTry');
     } else {
@@ -4359,6 +4687,17 @@ function explain(i) {
   const sib = INDEX.rows.filter(x => x.b === r.b && r.b >= 0);
   o.varianti = sib.length;
   o.variantiCol = (b.h || []).filter((h, k) => k > 0 && !SKIP_COL.test(h)).join(', ');
+  // pannello-x: written by hand in the Pannello di controllo
+  const X = INDEX.x && INDEX.x[r.c];
+  if (X) {
+    let any = false;
+    for (const k of ['cosa', 'dove', 'quanto', 'uso', 'altri', 'manut']) if (typeof X[k] === 'string' && X[k].trim()) { o[k] = X[k].trim(); any = true; }
+    if (typeof X.quanto === 'string' && X.quanto.trim()) o.resa = '';
+    if (Array.isArray(X.sapere) && X.sapere.length) { o.sapere = X.sapere.filter(x => typeof x === 'string' && x.trim()); any = true; }
+    if (Array.isArray(X.dati) && X.dati.length) { o.verif = X.dati.filter(x => typeof x === 'string' && x.trim()); o.fonte = X.fonte || 'non indicata'; any = true; }
+    if (typeof X.sch === 'string' && X.sch) o.scheda = X.sch;
+    if (any) o.known = true;
+  }
   return o;
 }
 
@@ -4523,9 +4862,11 @@ idleExtra();
 const SCH_BASE = (/\/prova\/(?:v\d+|anteprima)\//.test(location.href) ? location.href.split('/prova/')[0] + '/' : typeof SITE_CAT === 'string' ? SITE_CAT.replace(/catalog\/?$/, '') : '') + 'schede/';
 const schName = u => { let x = 0x811c9dc5; for (let k = 0; k < u.length; k++) { x ^= u.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16).padStart(8, '0'); };
 // sheets the copy job could not fetch (producer site refused it): opened on the producer's site instead
+let SCH_MAN_AT = -1, SCH_MAN_SET = new Set();
+const SCH_MAN = u => { try { if (SCH_MAN_AT !== INDEX.at) { SCH_MAN_AT = INDEX.at; SCH_MAN_SET = new Set(Object.values(INDEX.x || {}).map(x => x && x.sch).filter(Boolean)); } } catch (e) { return false; } return SCH_MAN_SET.has(u); };
 const NO_COPY = new Set(['8dc979fc']);
 const SCH_NEW = new Set(["0052d5b9", "02554877", "04abcae4", "05152002", "05fdfa65", "07b703c5", "093bd206", "09f6d13b", "12033e76", "14be7fe7", "153bd5ab", "1e71a32e", "1f73d5fd", "1fe9dd76", "20a65da2", "2142c339", "2204e683", "2283fd83", "228aa57e", "2368ac49", "24ab9b2a", "2600127b", "29b005b0", "2a4165e4", "2adc3ebc", "2dcb3ecb", "2df52c57", "2f0da6bd", "2f75b8ca", "31ac3456", "32fe1376", "334da146", "383193ed", "39e7b655", "3fe6ae90", "437ec00d", "439b62d0", "45109f9a", "466f2696", "48788db9", "490d1d03", "4b9d1912", "517f3b86", "534307f8", "5478dea8", "54c2d3d8", "55392d78", "59a8eb23", "5a735851", "5c1b1c42", "5d2f83fb", "5e08c8ae", "5e74ec14", "5f35e8c2", "63274b87", "63d9d1b4", "6471ddab", "648b8649", "6599d77f", "681d6d56", "6b00d2ee", "6cfd55f6", "6fa411ad", "7016443b", "7181aac3", "73363ed4", "73977c9c", "75637e57", "765fffa1", "79621f8c", "7c825070", "7cd0189c", "7d70bfa4", "7ebc9818", "7f191706", "800ee95b", "815483b4", "822b76fe", "834b1d63", "856bc660", "88b94162", "8ad16168", "90de43b8", "90fddd5a", "924fee8e", "9269611d", "938adec1", "948c9de3", "95233b5a", "98b75606", "9c316f4f", "9ca746e7", "9eed0e6b", "a0bd6fa6", "a3a5c2d5", "a66a767f", "a6fed575", "a77c6cbd", "a9587240", "aa24d3d3", "ae3a9817", "b3aac192", "b46935a7", "b79954c6", "b9290903", "b996a077", "b9d83d11", "bbcb9838", "bcaf775f", "bfab34df", "c2bd3371", "c2d0949b", "c58d36ee", "c84f684b", "caca0102", "cc9fd5d7", "ccafd3a0", "cea46021", "cf26ccfc", "cf6f8e78", "cff8cb71", "d3941d5d", "d778f92b", "d876c579", "d9dcd796", "da994181", "daadf079", "dc2fcd23", "de71374f", "e01d216e", "e0737366", "e52ddb1b", "e5a6b599", "e609f344", "e758796d", "e768e520", "e77e012b", "e7a92eae", "e975a737", "ea78359c", "ec112c14", "ec18b765", "ec94b097", "ee5ddb2b", "eef0629b", "f2b9c7ed", "f3548d68", "f446d25d", "f5b2a5fd", "f7f78968", "f8c058c8", "f8e6ef81", "f9c4a93a", "feb76233"]);
-const isPdf = u => SCH_NEW.has(schName(u)) || /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS|3m\.com\/mws\/mediawebserver/i.test(u);
+const isPdf = u => SCH_MAN(u) || SCH_NEW.has(schName(u)) || /\.pdf(#page=\d+)?$|getdocument|DataSheet\/PDS|3m\.com\/mws\/mediawebserver/i.test(u);
 let schDb = null;
 function db() {
   if (schDb) return schDb;
@@ -5156,7 +5497,7 @@ window.__nvSugg = { codeSugg, textSugg, wordFix };
 // ---------------------------------------------------------------- lista (dipendenti: per il cliente; clienti: lista dei desideri)
 const LKEY = CLI ? 'listaClienteC' : 'listaCliente';
 // lancio34: customer apps keep the list they had (prices and discounts dropped); never on the shared github.io site
-if (CLI) try { if (localStorage.getItem(LKEY) == null && location.hostname !== 'serginolimoncino.github.io') { const v0 = JSON.parse(localStorage.getItem('listaCliente') || 'null'); if (v0 && Array.isArray(v0.items)) localStorage.setItem(LKEY, JSON.stringify({ items: v0.items.map(x => ({ c: x && x.c, q: x && x.q, p: null })), cliente: '', note: typeof v0.note === 'string' ? v0.note : '' })); } } catch (e) {}
+if (CLI) try { if (localStorage.getItem(LKEY) == null && location.hostname !== 'battagli-cliente.pages.dev') { const v0 = JSON.parse(localStorage.getItem('listaCliente') || 'null'); if (v0 && Array.isArray(v0.items)) localStorage.setItem(LKEY, JSON.stringify({ items: v0.items.map(x => ({ c: x && x.c, q: x && x.q, p: null })), cliente: '', note: typeof v0.note === 'string' ? v0.note : '' })); } } catch (e) {}
 const LTITLE = CLI ? 'Lista dei desideri' : 'Lista per il cliente';
 const lget = () => {
   let v = null; try { v = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) {}
@@ -5286,7 +5627,7 @@ function listRender() {
   // left out of the total, the PDF and the message, and each one can be taken away with ✕
   const ls = lines(), body = $$('listBody');
   const gone = ready() ? L.items.filter(x => rowOf(x.c) < 0) : [];
-  const goneHtml = gone.length ? `<div class="nv-lrow nv-gone"><b>${gone.length === 1 ? 'Questo articolo non è più nel catalogo' : 'Questi articoli non sono più nel catalogo'}</b><small>${gone.length === 1 ? 'Non conta nel totale e non viene inviato.' : 'Non contano nel totale e non vengono inviati.'}</small>${gone.map(x => `<div class="g"><span>${fmtCode(x.c)}</span><button class="x" type="button" data-ldel="${x.c}" aria-label="Togli dalla lista">✕</button></div>`).join('')}</div>` : '';
+  const goneHtml = gone.length ? `<div class="nv-lrow nv-gone"><b>${gone.length === 1 ? 'Questo articolo non è più nel catalogo' : 'Questi articoli non sono più nel catalogo'}</b><small>${gone.length === 1 ? 'Non viene inviato.' : 'Non vengono inviati.'}</small>${gone.map(x => `<div class="g"><span>${fmtCode(x.c)}</span><button class="x" type="button" data-ldel="${x.c}" aria-label="Togli dalla lista">✕</button></div>`).join('')}</div>` : '';
   $$('listSub').textContent = ls.length ? (ls.length === 1 ? '1 articolo' : ls.length + ' articoli') + (noPdf() ? ' · si invia come messaggio' : ' · si invia come PDF o come messaggio') : '';
   if (sview) { savedRender(); return; }
   const bar = sbarHtml();
@@ -5708,7 +6049,7 @@ window.__lista = { add: addCode, remove: removeCode, lines, msgText, open: listO
   setTimeout(async () => {
     let j; try { const r = await fetch(UPD_BASE + 'app.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return; j = await r.json(); } catch (e) { return; }
     if (typeof A.installApp !== 'function' && typeof A.openUrl !== 'function') return;  // no way to open the download in this app
-    if (!j || !(j.vc > have) || typeof j.apk !== 'string' || !/^https:\/\/serginolimoncino\.github\.io\/[\w./-]+\.apk$/.test(j.apk)) return;
+    if (!j || !(j.vc > have) || typeof j.apk !== 'string' || !/^https:\/\/battagli-cliente\.pages\.dev\/[\w./-]+\.apk$/.test(j.apk)) return;
     try { if (sessionStorage.getItem('appUpdLater') === String(j.vc)) return; } catch (e) {}
     const bar = document.createElement('div'); bar.className = 'updbar'; bar.id = 'appUpdBar'; bar.setAttribute('role', 'status');
     bar.innerHTML = '<div class="ut"><b>Nuova versione dell\'app</b><small>' + (have ? 'Si installa con un tocco: i tuoi dati restano' : 'Con il microfono che cerca da solo: scaricala e installala') + '</small></div><button class="btn primary" type="button">' + (typeof A.installApp === 'function' ? 'Installa' : 'Scarica') + '</button><button class="updx" type="button" aria-label="Più tardi">×</button>';

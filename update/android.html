@@ -899,7 +899,7 @@ function labelFor(hd, it) {
   return bd < 60 ? best : '';
 }
 
-// Prices look like "12,50 A" (the letter is the price list). Make sure the price is labelled "prezzo":
+// Prices look like "N,NN A" (the letter is the price list). Make sure the price is labelled "prezzo":
 // split it off a cell it is glued to, and label it when the header was missing or wrong.
 const PRICE_RE = /^\d[\d.]*,\d{2} [ABCHNTUXYZ]$/;
 function fixPrice(f) {
@@ -1014,11 +1014,11 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 let PRE = null;
 let PRE_SIG = '';
 const preSig = () => PRE_SIG || (PRE_SIG = (() => { const t = [normText, words, fmtCode, fold, buildVocab].map(f => String(f)).join('|') + [...STOP].join(','); let x = 0x811c9dc5; for (let k = 0; k < t.length; k++) { x ^= t.charCodeAt(k); x = Math.imul(x, 16777619) >>> 0; } return x.toString(16); })());
-const preKey = idx => [preSig() + '|clean1', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
+const preKey = idx => [preSig() + '|clean2', idx.at, idx.v, idx.name, idx.rows.length, idx.blocks.length].join('|');
 let preT = 0;
 function savePre(idx) { clearTimeout(preT); const key = preKey(idx), d = { key, HAY, HAYT, HAYS, V: [...VOCAB] }; preT = setTimeout(() => { if (INDEX === idx) idbSet('pre', d); }, 4000); }
 function cleanIdx(idx) {
-  if (!idx || idx.example || !idx.rows || idx.cleanV === 1) return;
+  if (!idx || idx.example || !idx.rows || idx.cleanV === 2) return;
   let cli = false; try { cli = APP_ED === 'cliente'; } catch (e) {}
   for (const r of idx.rows) {
     if (!r || !r.f) continue;
@@ -1030,7 +1030,9 @@ function cleanIdx(idx) {
       return m ? [k, m[1]] : [k, v];
     }).filter(([k, v]) => !(/prezz/i.test(k) && v === ''));
   }
-  idx.cleanV = 1;
+  // clean2: prices in a field with no name ('N,NN A'), copies without prices only
+  for (const r of idx.rows) { if (r && r.f) r.f = r.f.filter(([k, v]) => k || !/^\s*(?:€\s*)?\d[\d.]*,\d{2}\s+[A-KM-UX-Z]\s*$/.test(String(v))); }
+  idx.cleanV = 2;
 }
 function setIndex(idx, meta) {
   cleanIdx(idx);
@@ -3204,7 +3206,7 @@ $('favQ').addEventListener('input', favPageRender);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('sheet').hidden && !$('favSheet').hidden) favPageClose(); });
 
 // ---------- share the app: Android / iPhone / PC Windows, always this edition ----------
-const SHARE_URL = { android: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-Marine-Hardware.apk', ios: 'https://serginolimoncino.github.io/battagli-cliente/', pc: 'https://serginolimoncino.github.io/battagli-cliente/app/Battagli-PC-Windows.zip' };
+const SHARE_URL = {"android": "https://battagli-cliente.pages.dev/", "ios": "https://battagli-cliente.pages.dev/", "pc": "https://battagli-cliente.pages.dev/"};
 const SHARE_TXT = { android: 'Catalogo Battagli per Android: scarica e installa l\'app da questo link.', ios: 'Catalogo Battagli per iPhone: apri il link con Safari, poi Condividi > "Aggiungi alla schermata Home".', pc: 'Catalogo Battagli per PC Windows: scarica lo zip, estrailo e apri "Battagli Catalogo".' };
 async function shareTo(k) {
   const url = SHARE_URL[k], text = SHARE_TXT[k];
@@ -3231,7 +3233,7 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- one-tap updates ----------
-const APP_V = 34, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
+const APP_V = 42, APP_ED = 'cliente', APP_PF = 'android', UPD_BASE = 'https://serginolimoncino.github.io/battagli-cliente/update/';
 // Sergio wants the version shown as 2.0; the build number behind it still grows with every update
 const vTxt = n => '2.0 · copia ' + (APP_ED === 'cliente' ? 'clienti' : 'dipendenti');
 let UPD = null;
@@ -6285,4 +6287,4 @@ window.__lista = { add: addCode, remove: removeCode, lines, msgText, open: listO
 })();
 })();
 
-</script></body></html>
+</script><div id="nuovo-indirizzo" style="position:fixed;left:10px;right:10px;bottom:10px;z-index:99999;background:#0b3d63;color:#fff;border-radius:12px;padding:12px 14px;font:15px/1.35 sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.35)"><b>Il catalogo ha un nuovo indirizzo.</b> Questa app non riceve più gli aggiornamenti. Apri il catalogo in Chrome:<br><a id="nuovo-indirizzo-vai" href="https://battagli-cliente.pages.dev/" style="display:inline-block;margin-top:8px;padding:8px 12px;background:#fff;color:#0b3d63;border-radius:8px;font-weight:700;text-decoration:none">Apri il nuovo catalogo</a> <button type="button" onclick="this.parentNode.style.display='none'" style="margin-left:8px;background:none;border:0;color:#fff;text-decoration:underline;font:inherit">Dopo</button></div><script>/*ponte-avviso*/document.getElementById("nuovo-indirizzo-vai").onclick=function(e){var A=window.BattagliApp;if(A&&typeof A.openUrl==="function"){e.preventDefault();A.openUrl(this.href);}};</script></body></html>
