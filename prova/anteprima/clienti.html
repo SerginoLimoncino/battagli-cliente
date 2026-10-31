@@ -897,7 +897,7 @@ function labelFor(hd, it) {
   return bd < 60 ? best : '';
 }
 
-// Prices look like "12,50 A" (the letter is the price list). Make sure the price is labelled "prezzo":
+// Prices look like "N,NN A" (the letter is the price list). Make sure the price is labelled "prezzo":
 // split it off a cell it is glued to, and label it when the header was missing or wrong.
 const PRICE_RE = /^\d[\d.]*,\d{2} [ABCHNTUXYZ]$/;
 function fixPrice(f) {

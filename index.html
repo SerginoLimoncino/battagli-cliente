@@ -897,7 +897,7 @@ function labelFor(hd, it) {
   return bd < 60 ? best : '';
 }
 
-// Prices look like "12,50 A" (the letter is the price list). Make sure the price is labelled "prezzo":
+// Prices look like "N,NN A" (the letter is the price list). Make sure the price is labelled "prezzo":
 // split it off a cell it is glued to, and label it when the header was missing or wrong.
 const PRICE_RE = /^\d[\d.]*,\d{2} [ABCHNTUXYZ]$/;
 function fixPrice(f) {
@@ -1028,7 +1028,7 @@ function cleanIdx(idx) {
       return m ? [k, m[1]] : [k, v];
     }).filter(([k, v]) => !(/prezz/i.test(k) && v === ''));
   }
-  // clean2: prices in a field with no name ('0,60 A'), copies without prices only
+  // clean2: prices in a field with no name ('N,NN A'), copies without prices only
   for (const r of idx.rows) { if (r && r.f) r.f = r.f.filter(([k, v]) => k || !/^\s*(?:€\s*)?\d[\d.]*,\d{2}\s+[A-KM-UX-Z]\s*$/.test(String(v))); }
   idx.cleanV = 2;
 }
